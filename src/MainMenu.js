@@ -725,6 +725,9 @@ export class MainMenu {
     handleClick(x, y) {
         if (!this.active) return null;
 
+        // Debug: log all clicks
+        console.log('MainMenu click at', x, y, 'solCopyButton:', this.solCopyButton);
+
         // If How to Play dialog is open, only handle close button
         if (this.showHowToPlay) {
             if (this.howToPlayCloseButton && this.isInBounds(x, y, this.howToPlayCloseButton)) {
@@ -778,12 +781,24 @@ export class MainMenu {
 
         // Check SOL address copy button
         if (this.solCopyButton && this.isInBounds(x, y, this.solCopyButton)) {
-            console.log('Copy SOL address clicked');
-            navigator.clipboard.writeText(this.solTokenAddress).then(() => {
-                this.copyFeedbackTimer = 1500; // Show "Copied!" for 1.5 seconds
-            }).catch(err => {
-                console.error('Failed to copy:', err);
-            });
+            console.log('Copy SOL address clicked at', x, y, 'hitbox:', this.solCopyButton);
+            // Set feedback immediately so user sees response
+            this.copyFeedbackTimer = 1500;
+
+            // Try to copy to clipboard
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(this.solTokenAddress).catch(err => {
+                    console.error('Clipboard failed:', err);
+                });
+            } else {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = this.solTokenAddress;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+            }
             return 'copy_sol';
         }
 
