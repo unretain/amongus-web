@@ -441,7 +441,7 @@ export class MainMenu {
                 this.walletButton = { x: walletX, y: rowY, w: walletW, h: walletH };
             }
 
-            // Draw How to Play button (RIGHT)
+            // Draw How to Play button (RIGHT) - using sprite
             const htpX = startX + walletW + gap;
             ctx.drawImage(
                 menuTexture,
@@ -507,32 +507,36 @@ export class MainMenu {
                 dialogX, dialogY, dialogW, dialogH, 14);
         }
 
-        // Title - white text
+        // Title - same style as Wallet dialog
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 32px "VCR OSD Mono", monospace';
+        ctx.font = '36px "In Your Face Joffrey", Arial';
         ctx.textAlign = 'center';
         ctx.fillText('HOW TO PLAY', screenW / 2, dialogY + 50);
 
-        // Content - white text
-        ctx.font = '18px "VCR OSD Mono", monospace';
-
+        // Content - same font as Wallet dialog
         let y = dialogY + 100;
         const lineSpacing = 80;
 
+        ctx.font = 'bold 16px "Varela Round", Arial';
         ctx.fillText('1. The game generates a SOLANA ADDRESS', screenW / 2, y);
-        ctx.fillText('   Your earnings will be sent there', screenW / 2, y + 25);
+        ctx.font = '14px "Varela Round", Arial';
+        ctx.fillText('Your earnings will be sent there', screenW / 2, y + 25);
 
         y += lineSpacing;
 
+        ctx.font = 'bold 16px "Varela Round", Arial';
         ctx.fillText('2. IMPOSTORS win = 10,000 TOKENS', screenW / 2, y);
-        ctx.fillText('   Split between all impostors', screenW / 2, y + 25);
+        ctx.font = '14px "Varela Round", Arial';
+        ctx.fillText('Split between all impostors', screenW / 2, y + 25);
 
         y += lineSpacing;
 
+        ctx.font = 'bold 16px "Varela Round", Arial';
         ctx.fillText('3. CREWMATES win = 10,000 TOKENS', screenW / 2, y);
-        ctx.fillText('   Split between all crewmates', screenW / 2, y + 25);
+        ctx.font = '14px "Varela Round", Arial';
+        ctx.fillText('Split between all crewmates', screenW / 2, y + 25);
 
-        // Close button using backer_2 - NO FALLBACK FILL
+        // Close button using backer_2
         const closeW = 120;
         const closeH = 45;
         const closeX = (screenW - closeW) / 2;
@@ -543,8 +547,8 @@ export class MainMenu {
                 closeX, closeY, closeW, closeH, 10);
         }
 
-        // Close button text
-        ctx.font = 'bold 20px "VCR OSD Mono", monospace';
+        // Close button text - same style as Wallet
+        ctx.font = '20px "In Your Face Joffrey", Arial';
         ctx.fillText('CLOSE', screenW / 2, closeY + 30);
 
         // Store close button hitbox
