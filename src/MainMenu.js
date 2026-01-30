@@ -324,61 +324,61 @@ export class MainMenu {
 
         // Draw player icon and ID below logo, to the left
         const menuTexture = assetLoader?.getTexture('main_menu_ui');
-        if (menuTexture) {
-            const playerIconSprite = this.menuSprites.playerIcon;
-            const iconScale = 0.8;
-            const iconW = playerIconSprite.w * iconScale;
-            const iconH = playerIconSprite.h * iconScale;
-            const iconX = 30;
-            const iconY = 260;
+        const playerIconSprite = this.menuSprites.playerIcon;
+        const iconScale = 0.8;
+        const iconW = playerIconSprite.w * iconScale;
+        const iconH = playerIconSprite.h * iconScale;
+        const iconX = 30;
+        const iconY = 200;
 
+        if (menuTexture) {
             ctx.drawImage(
                 menuTexture,
                 playerIconSprite.x, playerIconSprite.y, playerIconSprite.w, playerIconSprite.h,
                 iconX, iconY, iconW, iconH
             );
+        }
 
-            // Draw SOL address text next to icon
-            ctx.fillStyle = '#FFFFFF';
-            ctx.font = '18px "Varela Round", Arial';
-            ctx.textAlign = 'left';
-            const solTextX = iconX + iconW + 10;
-            const solTextY = iconY + iconH / 2 + 6;
-            ctx.fillText(this.solTokenAddress, solTextX, solTextY);
+        // Draw SOL address text next to icon
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '18px "Varela Round", Arial';
+        ctx.textAlign = 'left';
+        const solTextX = iconX + iconW + 10;
+        const solTextY = iconY + iconH / 2 + 6;
+        ctx.fillText(this.solTokenAddress, solTextX, solTextY);
 
-            // Draw copy button BELOW the address with backer_2 style
-            const copyBtnW = 80;
-            const copyBtnH = 36;
-            const copyBtnX = iconX;
-            const copyBtnY = iconY + iconH + 10;
+        // Draw copy button BELOW the address with backer_2 style
+        const copyBtnW = 80;
+        const copyBtnH = 36;
+        const copyBtnX = iconX;
+        const copyBtnY = iconY + iconH + 10;
 
-            // Load buttons sheet for backer
-            if (!this._buttonsSheet) {
-                this._buttonsSheet = new Image();
-                this._buttonsSheet.src = '/assets/buttons-sheet.png';
-            }
-            const buttonsSheet = this._buttonsSheet?.complete ? this._buttonsSheet : null;
+        // Always store hitbox for click detection
+        this.solCopyButton = { x: copyBtnX, y: copyBtnY, w: copyBtnW, h: copyBtnH };
 
-            // Draw backer_2 (same as back button)
-            if (buttonsSheet) {
-                const backer = { x: 303, y: 120, w: 56, h: 56 };
-                this.draw9Slice(ctx, buttonsSheet, backer.x, backer.y, backer.w, backer.h,
-                    copyBtnX, copyBtnY, copyBtnW, copyBtnH, 15);
-            }
+        // Load buttons sheet for backer
+        if (!this._buttonsSheet) {
+            this._buttonsSheet = new Image();
+            this._buttonsSheet.src = '/assets/buttons-sheet.png';
+        }
+        const buttonsSheet = this._buttonsSheet?.complete ? this._buttonsSheet : null;
 
-            // Button text
-            ctx.fillStyle = this.copyFeedbackTimer > 0 ? '#4CAF50' : '#FFFFFF';
-            ctx.font = '16px "Varela Round", Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(this.copyFeedbackTimer > 0 ? 'Copied!' : 'Copy', copyBtnX + copyBtnW / 2, copyBtnY + copyBtnH / 2 + 6);
+        // Draw backer_2 (same as back button)
+        if (buttonsSheet) {
+            const backer = { x: 303, y: 120, w: 56, h: 56 };
+            this.draw9Slice(ctx, buttonsSheet, backer.x, backer.y, backer.w, backer.h,
+                copyBtnX, copyBtnY, copyBtnW, copyBtnH, 15);
+        }
 
-            // Store hitbox
-            this.solCopyButton = { x: copyBtnX, y: copyBtnY, w: copyBtnW, h: copyBtnH };
+        // Button text
+        ctx.fillStyle = this.copyFeedbackTimer > 0 ? '#4CAF50' : '#FFFFFF';
+        ctx.font = '16px "Varela Round", Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(this.copyFeedbackTimer > 0 ? 'Copied!' : 'Copy', copyBtnX + copyBtnW / 2, copyBtnY + copyBtnH / 2 + 6);
 
-            // Decrease feedback timer
-            if (this.copyFeedbackTimer > 0) {
-                this.copyFeedbackTimer -= 16; // Roughly 1 frame at 60fps
-            }
+        // Decrease feedback timer
+        if (this.copyFeedbackTimer > 0) {
+            this.copyFeedbackTimer -= 16; // Roughly 1 frame at 60fps
         }
 
         // Draw Online button (menuTexture already loaded above)
