@@ -59,7 +59,13 @@ const io = new Server(server, {
 });
 
 // Serve static files in production
-app.use(express.static(path.join(__dirname, '../dist')));
+app.use(express.static(path.join(__dirname, '../dist'), { index: 'index.html' }));
+app.use('/assets', express.static(path.join(__dirname, '../dist/assets')));
+
+// Serve root explicitly
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, '../dist/index.html'));
+});
 
 // ============================================
 // GAME ROOM MANAGER
