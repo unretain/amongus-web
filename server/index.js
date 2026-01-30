@@ -889,6 +889,14 @@ io.on('connection', (socket) => {
 });
 
 // ============================================
+// CATCH-ALL ROUTE (serve index.html for SPA)
+// ============================================
+
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../dist/index.html'));
+});
+
+// ============================================
 // START SERVER
 // ============================================
 
