@@ -370,8 +370,8 @@ export class MainMenu {
                 copyBtnX, copyBtnY, copyBtnW, copyBtnH, 15);
         }
 
-        // Button text
-        ctx.fillStyle = this.copyFeedbackTimer > 0 ? '#4CAF50' : '#FFFFFF';
+        // Button text (always white)
+        ctx.fillStyle = '#FFFFFF';
         ctx.font = '16px "Varela Round", Arial';
         ctx.textAlign = 'center';
         ctx.fillText(this.copyFeedbackTimer > 0 ? 'Copied!' : 'Copy', copyBtnX + copyBtnW / 2, copyBtnY + copyBtnH / 2 + 6);
@@ -725,9 +725,6 @@ export class MainMenu {
     handleClick(x, y) {
         if (!this.active) return null;
 
-        // Debug: log all clicks
-        console.log('MainMenu click at', x, y, 'solCopyButton:', this.solCopyButton);
-
         // If How to Play dialog is open, only handle close button
         if (this.showHowToPlay) {
             if (this.howToPlayCloseButton && this.isInBounds(x, y, this.howToPlayCloseButton)) {
@@ -781,7 +778,6 @@ export class MainMenu {
 
         // Check SOL address copy button
         if (this.solCopyButton && this.isInBounds(x, y, this.solCopyButton)) {
-            console.log('Copy SOL address clicked at', x, y, 'hitbox:', this.solCopyButton);
             // Set feedback immediately so user sees response
             this.copyFeedbackTimer = 1500;
 
