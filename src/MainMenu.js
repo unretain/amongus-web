@@ -346,29 +346,31 @@ export class MainMenu {
             const solTextY = iconY + iconH / 2 + 6;
             ctx.fillText(this.solTokenAddress, solTextX, solTextY);
 
-            // Measure text width for copy button placement
-            const textWidth = ctx.measureText(this.solTokenAddress).width;
+            // Draw copy button BELOW the address with backer_2 style
+            const copyBtnW = 80;
+            const copyBtnH = 36;
+            const copyBtnX = iconX;
+            const copyBtnY = iconY + iconH + 10;
 
-            // Draw copy button
-            const copyBtnX = solTextX + textWidth + 10;
-            const copyBtnY = solTextY - 16;
-            const copyBtnW = 60;
-            const copyBtnH = 24;
+            // Load buttons sheet for backer
+            if (!this._buttonsSheet) {
+                this._buttonsSheet = new Image();
+                this._buttonsSheet.src = '/assets/buttons-sheet.png';
+            }
+            const buttonsSheet = this._buttonsSheet?.complete ? this._buttonsSheet : null;
 
-            // Button background
-            ctx.fillStyle = this.copyFeedbackTimer > 0 ? '#4CAF50' : '#444';
-            ctx.strokeStyle = '#888';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.roundRect(copyBtnX, copyBtnY, copyBtnW, copyBtnH, 4);
-            ctx.fill();
-            ctx.stroke();
+            // Draw backer_2 (same as back button)
+            if (buttonsSheet) {
+                const backer = { x: 303, y: 120, w: 56, h: 56 };
+                this.draw9Slice(ctx, buttonsSheet, backer.x, backer.y, backer.w, backer.h,
+                    copyBtnX, copyBtnY, copyBtnW, copyBtnH, 15);
+            }
 
             // Button text
-            ctx.fillStyle = '#FFF';
-            ctx.font = '12px "Varela Round", Arial';
+            ctx.fillStyle = this.copyFeedbackTimer > 0 ? '#4CAF50' : '#FFFFFF';
+            ctx.font = '16px "Varela Round", Arial';
             ctx.textAlign = 'center';
-            ctx.fillText(this.copyFeedbackTimer > 0 ? 'Copied!' : 'Copy', copyBtnX + copyBtnW / 2, copyBtnY + 16);
+            ctx.fillText(this.copyFeedbackTimer > 0 ? 'Copied!' : 'Copy', copyBtnX + copyBtnW / 2, copyBtnY + copyBtnH / 2 + 6);
 
             // Store hitbox
             this.solCopyButton = { x: copyBtnX, y: copyBtnY, w: copyBtnW, h: copyBtnH };
