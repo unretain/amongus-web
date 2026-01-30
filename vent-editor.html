@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vent Map Editor - Among Us Clone</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a2e;
+            color: white;
+            overflow: hidden;
+        }
+        #container {
+            display: flex;
+            height: 100vh;
+        }
+        #sidebar {
+            width: 300px;
+            background: #16213e;
+            padding: 15px;
+            overflow-y: auto;
+            border-right: 2px solid #0f3460;
+        }
+        #canvas-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+        #mapCanvas {
+            position: absolute;
+            cursor: crosshair;
+        }
+        h1 { font-size: 18px; margin-bottom: 15px; color: #e94560; }
+        h2 { font-size: 14px; margin: 15px 0 10px; color: #0f4c75; }
+        .tool-section {
+            background: #0f3460;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        .tool-section label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 12px;
+        }
+        input[type="number"] {
+            width: 60px;
+            padding: 5px;
+            border: none;
+            border-radius: 4px;
+            background: #1a1a2e;
+            color: white;
+        }
+        button {
+            background: #e94560;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px 5px 5px 0;
+            font-size: 12px;
+        }
+        button:hover { background: #ff6b6b; }
+        button.active { background: #4ecca3; }
+        button.secondary { background: #0f4c75; }
+        button.secondary:hover { background: #1a6a9e; }
+        #ventList {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .vent-item {
+            background: #1a1a2e;
+            padding: 8px;
+            margin: 5px 0;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+        }
+        .vent-item .vent-group {
+            background: #e94560;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-weight: bold;
+        }
+        .vent-item button {
+            padding: 3px 8px;
+            margin: 0;
+            font-size: 10px;
+        }
+        #output {
+            background: #1a1a2e;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 10px;
+            max-height: 200px;
+            overflow: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .instructions {
+            font-size: 11px;
+            color: #aaa;
+            margin-bottom: 10px;
+            line-height: 1.4;
+        }
+        #coords {
+            position: fixed;
+            bottom: 10px;
+            left: 310px;
+            background: rgba(0,0,0,0.8);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+        #zoom-controls {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            display: flex;
+            gap: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="sidebar">
+            <h1>Vent Map Editor</h1>
+
+            <div class="instructions">
+                Click on the map to place vents. Vents with the same group number will be connected to each other.
+            </div>
+
+            <div class="tool-section">
+                <label>Current Vent Group:</label>
+                <input type="number" id="ventGroup" value="1" min="1" max="99">
+                <button id="placeMode" class="active">Place Mode</button>
+                <button id="deleteMode">Delete Mode</button>
+            </div>
+
+            <div class="tool-section">
+                <h2>Placed Vents</h2>
+                <div id="ventList"></div>
+            </div>
+
+            <div class="tool-section">
+                <button id="exportBtn">Export JSON</button>
+                <button id="importBtn" class="secondary">Import JSON</button>
+                <button id="clearBtn" class="secondary">Clear All</button>
+                <button id="loadExisting" class="secondary">Load Existing</button>
+            </div>
+
+            <div class="tool-section">
+                <h2>Output</h2>
+                <div id="output">Click Export to generate vent data...</div>
+            </div>
+        </div>
+
+        <div id="canvas-container">
+            <canvas id="mapCanvas"></canvas>
+        </div>
+    </div>
+
+    <div id="coords">X: 0, Y: 0</div>
+    <div id="zoom-controls">
+        <button id="zoomIn">+</button>
+        <button id="zoomOut">-</button>
+        <button id="resetView">Reset</button>
+    </div>
+
+    <input type="file" id="fileInput" style="display:none" accept=".json">
+
+    <script>
+        const canvas = document.getElementById('mapCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('canvas-container');
+
+        let mapImage = new Image();
+        let vents = [];
+        let mode = 'place'; // 'place' or 'delete'
+        let zoom = 0.25; // Start at 0.25 scale like the game
+        let panX = 0, panY = 0;
+        let isDragging = false;
+        let lastMouseX, lastMouseY;
+
+        // Group colors for visual distinction
+        const groupColors = [
+            '#e94560', '#4ecca3', '#3498db', '#f1c40f', '#9b59b6',
+            '#e67e22', '#1abc9c', '#e74c3c', '#2ecc71', '#34495e'
+        ];
+
+        function getGroupColor(group) {
+            return groupColors[(group - 1) % groupColors.length];
+        }
+
+        // Load map image
+        mapImage.onload = () => {
+            resizeCanvas();
+            render();
+        };
+        mapImage.src = '/assets/skeld-full.webp';
+
+        function resizeCanvas() {
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            render();
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        function render() {
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.save();
+            ctx.translate(panX, panY);
+            ctx.scale(zoom, zoom);
+
+            // Draw map
+            if (mapImage.complete) {
+                ctx.drawImage(mapImage, 0, 0);
+            }
+
+            // Draw vents
+            for (const vent of vents) {
+                const color = getGroupColor(vent.group);
+
+                // Draw vent circle
+                ctx.beginPath();
+                ctx.arc(vent.x, vent.y, 40, 0, Math.PI * 2);
+                ctx.fillStyle = color + '80';
+                ctx.fill();
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                // Draw group number
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 30px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(vent.group.toString(), vent.x, vent.y);
+            }
+
+            // Draw connections between vents of same group
+            const groups = {};
+            for (const vent of vents) {
+                if (!groups[vent.group]) groups[vent.group] = [];
+                groups[vent.group].push(vent);
+            }
+
+            for (const group in groups) {
+                const groupVents = groups[group];
+                if (groupVents.length > 1) {
+                    ctx.strokeStyle = getGroupColor(parseInt(group)) + '60';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([10, 10]);
+
+                    for (let i = 0; i < groupVents.length; i++) {
+                        for (let j = i + 1; j < groupVents.length; j++) {
+                            ctx.beginPath();
+                            ctx.moveTo(groupVents[i].x, groupVents[i].y);
+                            ctx.lineTo(groupVents[j].x, groupVents[j].y);
+                            ctx.stroke();
+                        }
+                    }
+                    ctx.setLineDash([]);
+                }
+            }
+
+            ctx.restore();
+        }
+
+        function screenToMap(x, y) {
+            return {
+                x: Math.round((x - panX) / zoom),
+                y: Math.round((y - panY) / zoom)
+            };
+        }
+
+        function updateVentList() {
+            const list = document.getElementById('ventList');
+            list.innerHTML = '';
+
+            // Sort by group
+            const sorted = [...vents].sort((a, b) => a.group - b.group);
+
+            for (let i = 0; i < sorted.length; i++) {
+                const vent = sorted[i];
+                const div = document.createElement('div');
+                div.className = 'vent-item';
+                div.innerHTML = `
+                    <span>Vent ${i + 1}: (${vent.x}, ${vent.y})</span>
+                    <span class="vent-group" style="background: ${getGroupColor(vent.group)}">${vent.group}</span>
+                    <button onclick="deleteVent(${vents.indexOf(vent)})">X</button>
+                `;
+                list.appendChild(div);
+            }
+        }
+
+        function deleteVent(index) {
+            vents.splice(index, 1);
+            updateVentList();
+            render();
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.button === 1 || e.button === 2) { // Middle or right click for pan
+                isDragging = true;
+                lastMouseX = e.clientX;
+                lastMouseY = e.clientY;
+                canvas.style.cursor = 'grabbing';
+                return;
+            }
+
+            const rect = canvas.getBoundingClientRect();
+            const mapPos = screenToMap(e.clientX - rect.left, e.clientY - rect.top);
+
+            if (mode === 'place') {
+                const group = parseInt(document.getElementById('ventGroup').value) || 1;
+                vents.push({ x: mapPos.x, y: mapPos.y, group: group });
+                updateVentList();
+                render();
+            } else if (mode === 'delete') {
+                // Find and delete nearest vent within 50 pixels
+                let nearestIdx = -1;
+                let nearestDist = 50 / zoom;
+                for (let i = 0; i < vents.length; i++) {
+                    const dx = vents[i].x - mapPos.x;
+                    const dy = vents[i].y - mapPos.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < nearestDist) {
+                        nearestDist = dist;
+                        nearestIdx = i;
+                    }
+                }
+                if (nearestIdx >= 0) {
+                    vents.splice(nearestIdx, 1);
+                    updateVentList();
+                    render();
+                }
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mapPos = screenToMap(e.clientX - rect.left, e.clientY - rect.top);
+            document.getElementById('coords').textContent = `X: ${mapPos.x}, Y: ${mapPos.y} (Game: ${Math.round(mapPos.x * 0.25)}, ${Math.round(mapPos.y * 0.25)})`;
+
+            if (isDragging) {
+                panX += e.clientX - lastMouseX;
+                panY += e.clientY - lastMouseY;
+                lastMouseX = e.clientX;
+                lastMouseY = e.clientY;
+                render();
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            isDragging = false;
+            canvas.style.cursor = 'crosshair';
+        });
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+            const newZoom = Math.min(2, Math.max(0.1, zoom * zoomFactor));
+
+            // Zoom towards mouse position
+            panX = mouseX - (mouseX - panX) * (newZoom / zoom);
+            panY = mouseY - (mouseY - panY) * (newZoom / zoom);
+            zoom = newZoom;
+
+            render();
+        });
+
+        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        // Mode buttons
+        document.getElementById('placeMode').addEventListener('click', () => {
+            mode = 'place';
+            document.getElementById('placeMode').classList.add('active');
+            document.getElementById('deleteMode').classList.remove('active');
+            canvas.style.cursor = 'crosshair';
+        });
+
+        document.getElementById('deleteMode').addEventListener('click', () => {
+            mode = 'delete';
+            document.getElementById('deleteMode').classList.add('active');
+            document.getElementById('placeMode').classList.remove('active');
+            canvas.style.cursor = 'not-allowed';
+        });
+
+        // Export JSON
+        document.getElementById('exportBtn').addEventListener('click', () => {
+            // Convert to game format with connections
+            const groups = {};
+            for (let i = 0; i < vents.length; i++) {
+                const vent = vents[i];
+                if (!groups[vent.group]) groups[vent.group] = [];
+                groups[vent.group].push(i);
+            }
+
+            const gameVents = vents.map((vent, idx) => {
+                const connections = groups[vent.group].filter(i => i !== idx);
+                return {
+                    id: idx,
+                    x: Math.round(vent.x * 0.25), // Scale to game coords
+                    y: Math.round(vent.y * 0.25),
+                    group: vent.group,
+                    connections: connections
+                };
+            });
+
+            const output = JSON.stringify(gameVents, null, 2);
+            document.getElementById('output').textContent = output;
+
+            // Copy to clipboard
+            navigator.clipboard.writeText(output).then(() => {
+                alert('Copied to clipboard!');
+            });
+        });
+
+        // Import JSON
+        document.getElementById('importBtn').addEventListener('click', () => {
+            document.getElementById('fileInput').click();
+        });
+
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (evt) => {
+                    try {
+                        const data = JSON.parse(evt.target.result);
+                        vents = data.map(v => ({
+                            x: v.x * 4, // Scale back to full map coords
+                            y: v.y * 4,
+                            group: v.group || 1
+                        }));
+                        updateVentList();
+                        render();
+                    } catch (err) {
+                        alert('Invalid JSON file');
+                    }
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        // Clear all
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            if (confirm('Clear all vents?')) {
+                vents = [];
+                updateVentList();
+                render();
+            }
+        });
+
+        // Load existing vents from Map.js format
+        document.getElementById('loadExisting').addEventListener('click', () => {
+            // These are the existing vents from Map.js (in game coords, need to scale up)
+            const existingVents = [
+                { id: 0, x: 554, y: 199, group: 1, connections: [1] },
+                { id: 1, x: 259, y: 452, group: 1, connections: [0] },
+                { id: 2, x: 315, y: 625, group: 2, connections: [3] },
+                { id: 3, x: 559, y: 927, group: 2, connections: [2] },
+                { id: 4, x: 688, y: 631, group: 3, connections: [5, 6] },
+                { id: 5, x: 773, y: 501, group: 3, connections: [4, 6] },
+                { id: 6, x: 813, y: 675, group: 3, connections: [4, 5] },
+                { id: 7, x: 1364, y: 756, group: 4, connections: [8, 9, 13] },
+                { id: 8, x: 1669, y: 603, group: 4, connections: [7, 9, 13] },
+                { id: 9, x: 1676, y: 962, group: 4, connections: [7, 8, 13] },
+                { id: 13, x: 1965, y: 604, group: 4, connections: [7, 8, 9] },
+                { id: 10, x: 1441, y: 330, group: 5, connections: [11, 12] },
+                { id: 11, x: 1648, y: 160, group: 5, connections: [10, 12] },
+                { id: 12, x: 1975, y: 457, group: 5, connections: [10, 11] }
+            ];
+
+            vents = existingVents.map(v => ({
+                x: v.x * 4, // Scale to full map coords
+                y: v.y * 4,
+                group: v.group
+            }));
+            updateVentList();
+            render();
+        });
+
+        // Zoom controls
+        document.getElementById('zoomIn').addEventListener('click', () => {
+            zoom = Math.min(2, zoom * 1.2);
+            render();
+        });
+
+        document.getElementById('zoomOut').addEventListener('click', () => {
+            zoom = Math.max(0.1, zoom / 1.2);
+            render();
+        });
+
+        document.getElementById('resetView').addEventListener('click', () => {
+            zoom = 0.25;
+            panX = 0;
+            panY = 0;
+            render();
+        });
+
+        // Initial render
+        resizeCanvas();
+    </script>
+</body>
+</html>

@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Boxer Cutter - Text Backer Dimension Tool</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            background: #1a1a2e;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            gap: 20px;
+        }
+        .panel {
+            background: rgba(0,0,0,0.5);
+            border-radius: 8px;
+            padding: 15px;
+        }
+        #source-panel {
+            width: 600px;
+            flex-shrink: 0;
+        }
+        #output-panel {
+            flex: 1;
+            min-width: 400px;
+        }
+        h2 {
+            margin-top: 0;
+            color: #ff6b6b;
+        }
+        h3 {
+            margin: 10px 0;
+            color: #4ecdc4;
+        }
+        .controls {
+            margin-bottom: 15px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+        select, button {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        select {
+            background: #333;
+            color: #fff;
+        }
+        button {
+            background: #4ecdc4;
+            color: #000;
+        }
+        button:hover {
+            background: #3dbdb5;
+        }
+        button.danger {
+            background: #ff6b6b;
+            color: #fff;
+        }
+        button.copy {
+            background: #95e1d3;
+        }
+        #canvas-container {
+            position: relative;
+            overflow: auto;
+            max-height: 500px;
+            background: #222;
+            border: 2px solid #444;
+            border-radius: 4px;
+        }
+        canvas {
+            display: block;
+            cursor: crosshair;
+        }
+        #coords {
+            margin-top: 10px;
+            font-family: monospace;
+            background: #333;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .backer-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-bottom: 15px;
+        }
+        .backer-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: #2a2a4a;
+            border-radius: 4px;
+            margin-bottom: 8px;
+        }
+        .backer-item canvas {
+            border: 1px solid #555;
+            cursor: default;
+        }
+        .backer-info {
+            flex: 1;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .backer-info .name {
+            font-weight: bold;
+            color: #4ecdc4;
+            margin-bottom: 5px;
+        }
+        .backer-item button {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        #json-output {
+            background: #1a1a2e;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 11px;
+            white-space: pre;
+            overflow: auto;
+            max-height: 200px;
+            color: #95e1d3;
+        }
+        .instructions {
+            background: #2a2a4a;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .instructions li {
+            margin: 5px 0;
+        }
+        .zoom-label {
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <div id="source-panel" class="panel">
+        <h2>Boxer Cutter</h2>
+        <div class="instructions">
+            <strong>Cut text backing sprites:</strong>
+            <ol>
+                <li>Select a sprite sheet</li>
+                <li>Click and drag to select a text backer region</li>
+                <li>Click "Add Backer" to save it</li>
+                <li>Copy the JSON dimensions for use in code</li>
+            </ol>
+        </div>
+
+        <div class="controls">
+            <select id="sheetSelect">
+                <option value="player">Player Sheet</option>
+                <option value="buttons">Buttons Sheet</option>
+                <option value="mainmenu">MainMenu Sheet</option>
+            </select>
+            <span class="zoom-label">Zoom:</span>
+            <button onclick="setZoom(1)">1x</button>
+            <button onclick="setZoom(2)">2x</button>
+            <button onclick="setZoom(3)">3x</button>
+        </div>
+
+        <div id="canvas-container">
+            <canvas id="sourceCanvas"></canvas>
+            <canvas id="selectCanvas" style="position:absolute;top:0;left:0;pointer-events:none;"></canvas>
+        </div>
+
+        <div id="coords">X: 0, Y: 0 | Selection: none</div>
+
+        <div class="controls" style="margin-top: 15px;">
+            <input type="text" id="backerName" placeholder="Backer name (e.g., button_bg)"
+                   style="flex:1; padding:8px; border:none; border-radius:4px; background:#333; color:#fff;">
+            <button onclick="addBacker()">Add Backer</button>
+        </div>
+    </div>
+
+    <div id="output-panel" class="panel">
+        <h3>Saved Backers</h3>
+        <div id="backerList" class="backer-list">
+            <div style="color:#666; font-style:italic;">No backers saved yet</div>
+        </div>
+
+        <div class="controls">
+            <button onclick="exportJSON()">Export JSON</button>
+            <button class="copy" onclick="copyJSON()">Copy to Clipboard</button>
+            <button class="danger" onclick="clearAll()">Clear All</button>
+        </div>
+
+        <h3>JSON Output</h3>
+        <div id="json-output">// Select and add backers to see output</div>
+    </div>
+
+    <script>
+        const sourceCanvas = document.getElementById('sourceCanvas');
+        const sourceCtx = sourceCanvas.getContext('2d');
+        const selectCanvas = document.getElementById('selectCanvas');
+        const selectCtx = selectCanvas.getContext('2d');
+
+        let img = new Image();
+        let zoom = 2;
+        let isSelecting = false;
+        let selectionStart = { x: 0, y: 0 };
+        let selectionEnd = { x: 0, y: 0 };
+        let currentSelection = null;
+
+        // Saved backers
+        let backers = [];
+
+        // Sprite sheet paths
+        const sheets = {
+            player: '/assets/players/Player-sharedassets0.assets-55.png',
+            buttons: '/assets/gui/Buttons-sharedassets0.assets-73.png',
+            mainmenu: '/assets/gui/MainMenu-sharedassets0.assets-189.png'
+        };
+
+        // Load selected sheet
+        function loadSheet(name) {
+            img = new Image();
+            img.onload = function() {
+                resizeCanvases();
+                redraw();
+            };
+            img.src = sheets[name];
+            currentSelection = null;
+            updateCoords(0, 0);
+        }
+
+        function resizeCanvases() {
+            const w = img.width * zoom;
+            const h = img.height * zoom;
+            sourceCanvas.width = w;
+            sourceCanvas.height = h;
+            selectCanvas.width = w;
+            selectCanvas.height = h;
+        }
+
+        function setZoom(z) {
+            zoom = z;
+            resizeCanvases();
+            redraw();
+        }
+
+        function redraw() {
+            sourceCtx.imageSmoothingEnabled = false;
+            sourceCtx.clearRect(0, 0, sourceCanvas.width, sourceCanvas.height);
+            sourceCtx.drawImage(img, 0, 0, sourceCanvas.width, sourceCanvas.height);
+
+            // Redraw selection if exists
+            if (currentSelection) {
+                drawSelection(currentSelection.x, currentSelection.y,
+                             currentSelection.w, currentSelection.h);
+            }
+        }
+
+        function drawSelection(x, y, w, h) {
+            selectCtx.clearRect(0, 0, selectCanvas.width, selectCanvas.height);
+
+            // Draw selection box
+            selectCtx.strokeStyle = '#ff6b6b';
+            selectCtx.lineWidth = 2;
+            selectCtx.setLineDash([5, 5]);
+            selectCtx.strokeRect(x * zoom, y * zoom, w * zoom, h * zoom);
+
+            // Fill with semi-transparent
+            selectCtx.fillStyle = 'rgba(255, 107, 107, 0.2)';
+            selectCtx.fillRect(x * zoom, y * zoom, w * zoom, h * zoom);
+
+            selectCtx.setLineDash([]);
+        }
+
+        function updateCoords(x, y) {
+            let text = `X: ${x}, Y: ${y}`;
+            if (currentSelection) {
+                text += ` | Selection: (${currentSelection.x}, ${currentSelection.y}) ${currentSelection.w}x${currentSelection.h}`;
+            } else {
+                text += ' | Selection: none';
+            }
+            document.getElementById('coords').textContent = text;
+        }
+
+        // Mouse events
+        sourceCanvas.addEventListener('mousedown', (e) => {
+            const rect = sourceCanvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / zoom);
+            const y = Math.floor((e.clientY - rect.top) / zoom);
+
+            isSelecting = true;
+            selectionStart = { x, y };
+            selectionEnd = { x, y };
+        });
+
+        sourceCanvas.addEventListener('mousemove', (e) => {
+            const rect = sourceCanvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / zoom);
+            const y = Math.floor((e.clientY - rect.top) / zoom);
+
+            if (isSelecting) {
+                selectionEnd = { x, y };
+
+                const sx = Math.min(selectionStart.x, selectionEnd.x);
+                const sy = Math.min(selectionStart.y, selectionEnd.y);
+                const sw = Math.abs(selectionEnd.x - selectionStart.x);
+                const sh = Math.abs(selectionEnd.y - selectionStart.y);
+
+                currentSelection = { x: sx, y: sy, w: sw, h: sh };
+                drawSelection(sx, sy, sw, sh);
+            }
+
+            updateCoords(x, y);
+        });
+
+        sourceCanvas.addEventListener('mouseup', (e) => {
+            if (isSelecting) {
+                isSelecting = false;
+
+                const sx = Math.min(selectionStart.x, selectionEnd.x);
+                const sy = Math.min(selectionStart.y, selectionEnd.y);
+                const sw = Math.abs(selectionEnd.x - selectionStart.x);
+                const sh = Math.abs(selectionEnd.y - selectionStart.y);
+
+                if (sw > 2 && sh > 2) {
+                    currentSelection = { x: sx, y: sy, w: sw, h: sh };
+                } else {
+                    currentSelection = null;
+                    selectCtx.clearRect(0, 0, selectCanvas.width, selectCanvas.height);
+                }
+            }
+        });
+
+        sourceCanvas.addEventListener('mouseleave', () => {
+            if (isSelecting) {
+                isSelecting = false;
+            }
+        });
+
+        // Add backer to list
+        function addBacker() {
+            if (!currentSelection) {
+                alert('Please select a region first');
+                return;
+            }
+
+            const name = document.getElementById('backerName').value.trim() || `backer_${backers.length + 1}`;
+            const sheet = document.getElementById('sheetSelect').value;
+
+            const backer = {
+                name: name,
+                sheet: sheet,
+                x: currentSelection.x,
+                y: currentSelection.y,
+                width: currentSelection.w,
+                height: currentSelection.h
+            };
+
+            backers.push(backer);
+
+            // Clear input
+            document.getElementById('backerName').value = '';
+            currentSelection = null;
+            selectCtx.clearRect(0, 0, selectCanvas.width, selectCanvas.height);
+            updateCoords(0, 0);
+
+            renderBackerList();
+            exportJSON();
+        }
+
+        function renderBackerList() {
+            const list = document.getElementById('backerList');
+
+            if (backers.length === 0) {
+                list.innerHTML = '<div style="color:#666; font-style:italic;">No backers saved yet</div>';
+                return;
+            }
+
+            list.innerHTML = '';
+
+            backers.forEach((backer, index) => {
+                const item = document.createElement('div');
+                item.className = 'backer-item';
+
+                // Create preview canvas
+                const previewCanvas = document.createElement('canvas');
+                const previewSize = 60;
+                const scale = Math.min(previewSize / backer.width, previewSize / backer.height);
+                previewCanvas.width = Math.ceil(backer.width * scale);
+                previewCanvas.height = Math.ceil(backer.height * scale);
+
+                const pctx = previewCanvas.getContext('2d');
+                pctx.imageSmoothingEnabled = false;
+
+                // Draw from the correct sheet
+                const sheetImg = new Image();
+                sheetImg.onload = function() {
+                    pctx.drawImage(sheetImg,
+                        backer.x, backer.y, backer.width, backer.height,
+                        0, 0, previewCanvas.width, previewCanvas.height);
+                };
+                sheetImg.src = sheets[backer.sheet];
+
+                const info = document.createElement('div');
+                info.className = 'backer-info';
+                info.innerHTML = `
+                    <div class="name">${backer.name}</div>
+                    <div>Sheet: ${backer.sheet}</div>
+                    <div>Source: (${backer.x}, ${backer.y})</div>
+                    <div>Size: ${backer.width} x ${backer.height}</div>
+                `;
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'danger';
+                deleteBtn.textContent = 'Delete';
+                deleteBtn.onclick = () => {
+                    backers.splice(index, 1);
+                    renderBackerList();
+                    exportJSON();
+                };
+
+                item.appendChild(previewCanvas);
+                item.appendChild(info);
+                item.appendChild(deleteBtn);
+                list.appendChild(item);
+            });
+        }
+
+        function exportJSON() {
+            const output = {
+                textBackers: backers.map(b => ({
+                    name: b.name,
+                    sheet: b.sheet,
+                    source: { x: b.x, y: b.y, width: b.width, height: b.height }
+                }))
+            };
+
+            const json = JSON.stringify(output, null, 2);
+            document.getElementById('json-output').textContent = json;
+        }
+
+        function copyJSON() {
+            exportJSON();
+            const text = document.getElementById('json-output').textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Copied to clipboard!');
+            });
+        }
+
+        function clearAll() {
+            if (confirm('Clear all saved backers?')) {
+                backers = [];
+                renderBackerList();
+                document.getElementById('json-output').textContent = '// Select and add backers to see output';
+            }
+        }
+
+        // Sheet select handler
+        document.getElementById('sheetSelect').addEventListener('change', (e) => {
+            loadSheet(e.target.value);
+        });
+
+        // Initialize with player sheet (same as sprite-cutter)
+        loadSheet('player');
+    </script>
+</body>
+</html>

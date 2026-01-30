@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Task Placement Editor</title>
+    <style>
+        body {
+            background: #1a1a2e;
+            color: white;
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #container {
+            position: relative;
+            display: inline-block;
+            overflow: auto;
+            max-width: 95vw;
+            max-height: 70vh;
+            border: 2px solid #444;
+        }
+        #mapCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #taskCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            cursor: crosshair;
+        }
+        #controls {
+            margin-bottom: 15px;
+            padding: 15px;
+            background: #2a2a4a;
+            border-radius: 8px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #4ecdc4;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover { background: #45b7aa; }
+        button.active { background: #ff6b6b; }
+        button.green { background: #2ecc71; }
+        button.green:hover { background: #27ae60; }
+        button.green.active { background: #27ae60; border: 3px solid white; }
+        button.red { background: #e74c3c; }
+        button.red:hover { background: #c0392b; }
+        button.red.active { background: #c0392b; border: 3px solid white; }
+        button.blue { background: #3498db; }
+        button.blue:hover { background: #2980b9; }
+        button.blue.active { background: #2980b9; border: 3px solid white; }
+        h1 { color: #ff6b6b; }
+        h3 { color: #4ecdc4; margin-top: 0; }
+        .tool-group {
+            display: inline-block;
+            margin-right: 20px;
+            padding: 10px;
+            background: #1a1a2e;
+            border-radius: 5px;
+        }
+        .tool-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #888;
+        }
+        #taskList {
+            margin-top: 15px;
+            padding: 15px;
+            background: #2a2a4a;
+            border-radius: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        #taskList table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        #taskList th, #taskList td {
+            padding: 5px 10px;
+            text-align: left;
+            border-bottom: 1px solid #444;
+        }
+        #taskList th {
+            color: #4ecdc4;
+        }
+        .task-green { color: #2ecc71; }
+        .task-red { color: #e74c3c; }
+        .task-blue { color: #3498db; }
+        #codeOutput {
+            margin-top: 15px;
+            padding: 15px;
+            background: #1a1a2e;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        #instructions {
+            margin-top: 15px;
+            padding: 15px;
+            background: #2a2a4a;
+            border-radius: 8px;
+        }
+        #instructions ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        #instructions li {
+            margin: 5px 0;
+        }
+        .key {
+            background: #444;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>Task Placement Editor</h1>
+
+    <div id="controls">
+        <div class="tool-group">
+            <label>Task Type:</label>
+            <button id="btn-green" class="green active" onclick="setTaskType('green')">Green (Wires/Common)</button>
+            <button id="btn-red" class="red" onclick="setTaskType('red')">Red (Divert Power)</button>
+            <button id="btn-blue" class="blue" onclick="setTaskType('blue')">Blue (Receive Power)</button>
+        </div>
+
+        <div class="tool-group">
+            <label>Zoom:</label>
+            <button onclick="setZoom(0.5)">0.5x</button>
+            <button onclick="setZoom(1)" class="active" id="zoom1">1x</button>
+            <button onclick="setZoom(2)">2x</button>
+        </div>
+
+        <div class="tool-group">
+            <label>Actions:</label>
+            <button onclick="clearTasks()">Clear All</button>
+            <button onclick="undoLast()">Undo Last</button>
+            <button onclick="exportCode()">Generate Code</button>
+        </div>
+    </div>
+
+    <div id="container">
+        <canvas id="mapCanvas"></canvas>
+        <canvas id="taskCanvas"></canvas>
+    </div>
+
+    <div id="taskList">
+        <h3>Placed Tasks</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Type</th>
+                    <th>X (scaled)</th>
+                    <th>Y (scaled)</th>
+                    <th>X (original)</th>
+                    <th>Y (original)</th>
+                </tr>
+            </thead>
+            <tbody id="taskTableBody">
+            </tbody>
+        </table>
+    </div>
+
+    <div id="codeOutput">
+        <h3>Generated Code (click "Generate Code")</h3>
+    </div>
+
+    <div id="instructions">
+        <h3>Instructions</h3>
+        <ul>
+            <li><span class="key">Click</span> on the map to place a task marker</li>
+            <li><span class="key">Green</span> = Common tasks (Wires, etc.)</li>
+            <li><span class="key">Red</span> = Divert Power tasks (in Electrical)</li>
+            <li><span class="key">Blue</span> = Receive Power tasks (in target rooms)</li>
+            <li>Coordinates shown are for the 0.25 scaled map (what the game uses)</li>
+            <li>Click <strong>"Generate Code"</strong> to get the JavaScript code for Game.js</li>
+        </ul>
+    </div>
+
+    <script>
+        const mapCanvas = document.getElementById('mapCanvas');
+        const mapCtx = mapCanvas.getContext('2d');
+        const taskCanvas = document.getElementById('taskCanvas');
+        const taskCtx = taskCanvas.getContext('2d');
+        const container = document.getElementById('container');
+
+        let mapImg = new Image();
+        let zoom = 1;
+        let taskType = 'green'; // green, red, blue
+        let tasks = [];
+
+        // Map dimensions (scaled by 0.25)
+        const mapWidth = 2141;
+        const mapHeight = 1198;
+        const mapScale = 0.25; // The game uses 0.25 scale
+
+        // Task colors
+        const taskColors = {
+            green: { fill: 'rgba(46, 204, 113, 0.5)', stroke: '#2ecc71', name: 'Wires' },
+            red: { fill: 'rgba(231, 76, 60, 0.5)', stroke: '#e74c3c', name: 'Divert Power' },
+            blue: { fill: 'rgba(52, 152, 219, 0.5)', stroke: '#3498db', name: 'Receive Power' }
+        };
+
+        // Load the map image
+        mapImg.onload = function() {
+            resizeCanvases();
+            drawMap();
+            drawTasks();
+        };
+        mapImg.src = '/assets/skeld-full.webp';
+
+        function resizeCanvases() {
+            const w = mapWidth * zoom;
+            const h = mapHeight * zoom;
+
+            mapCanvas.width = w;
+            mapCanvas.height = h;
+            taskCanvas.width = w;
+            taskCanvas.height = h;
+
+            container.style.width = w + 'px';
+            container.style.height = h + 'px';
+        }
+
+        function drawMap() {
+            mapCtx.imageSmoothingEnabled = false;
+            mapCtx.drawImage(mapImg, 0, 0, mapCanvas.width, mapCanvas.height);
+        }
+
+        function drawTasks() {
+            taskCtx.clearRect(0, 0, taskCanvas.width, taskCanvas.height);
+
+            for (const task of tasks) {
+                const color = taskColors[task.type];
+                const x = task.x * zoom;
+                const y = task.y * zoom;
+                const size = 30 * zoom;
+
+                // Draw box
+                taskCtx.fillStyle = color.fill;
+                taskCtx.fillRect(x - size/2, y - size/2, size, size);
+                taskCtx.strokeStyle = color.stroke;
+                taskCtx.lineWidth = 3;
+                taskCtx.strokeRect(x - size/2, y - size/2, size, size);
+
+                // Draw center dot
+                taskCtx.fillStyle = color.stroke;
+                taskCtx.beginPath();
+                taskCtx.arc(x, y, 4 * zoom, 0, Math.PI * 2);
+                taskCtx.fill();
+            }
+
+            updateTaskList();
+        }
+
+        function setTaskType(type) {
+            taskType = type;
+            document.querySelectorAll('.tool-group button.green, .tool-group button.red, .tool-group button.blue').forEach(b => {
+                b.classList.remove('active');
+            });
+            document.getElementById('btn-' + type).classList.add('active');
+        }
+
+        function setZoom(z) {
+            zoom = z;
+            resizeCanvases();
+            drawMap();
+            drawTasks();
+        }
+
+        function clearTasks() {
+            if (confirm('Clear all task markers?')) {
+                tasks = [];
+                drawTasks();
+            }
+        }
+
+        function undoLast() {
+            if (tasks.length > 0) {
+                tasks.pop();
+                drawTasks();
+            }
+        }
+
+        function updateTaskList() {
+            const tbody = document.getElementById('taskTableBody');
+            tbody.innerHTML = '';
+
+            for (let i = 0; i < tasks.length; i++) {
+                const task = tasks[i];
+                const origX = Math.round(task.x / mapScale);
+                const origY = Math.round(task.y / mapScale);
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="task-${task.type}">${taskColors[task.type].name}</td>
+                    <td>${Math.round(task.x)}</td>
+                    <td>${Math.round(task.y)}</td>
+                    <td>${origX}</td>
+                    <td>${origY}</td>
+                `;
+                tbody.appendChild(row);
+            }
+        }
+
+        function exportCode() {
+            let code = '// Task positions for Game.js initTasks()\n';
+            code += 'const s = 0.25;\n\n';
+
+            const greenTasks = tasks.filter(t => t.type === 'green');
+            const redTasks = tasks.filter(t => t.type === 'red');
+            const blueTasks = tasks.filter(t => t.type === 'blue');
+
+            // Green tasks (Wires)
+            for (let i = 0; i < greenTasks.length; i++) {
+                const t = greenTasks[i];
+                const origX = Math.round(t.x / mapScale);
+                const origY = Math.round(t.y / mapScale);
+                code += `// Wires task ${i + 1}\n`;
+                code += `this.tasks.push(new WiresTask('Room', Math.round(${origX} * s), Math.round(${origY} * s)));\n\n`;
+            }
+
+            // Blue tasks first (Receive Power - needs to be created first for linking)
+            for (let i = 0; i < blueTasks.length; i++) {
+                const t = blueTasks[i];
+                const origX = Math.round(t.x / mapScale);
+                const origY = Math.round(t.y / mapScale);
+                code += `// Receive Power task ${i + 1}\n`;
+                code += `const receiveTask${i + 1} = new ReceivePowerTask('TargetRoom', Math.round(${origX} * s), Math.round(${origY} * s));\n`;
+                code += `this.tasks.push(receiveTask${i + 1});\n\n`;
+            }
+
+            // Red tasks (Divert Power)
+            for (let i = 0; i < redTasks.length; i++) {
+                const t = redTasks[i];
+                const origX = Math.round(t.x / mapScale);
+                const origY = Math.round(t.y / mapScale);
+                const receiveRef = blueTasks.length > i ? `receiveTask${i + 1}` : 'null';
+                code += `// Divert Power task ${i + 1}\n`;
+                code += `const divertTask${i + 1} = new DivertPowerTask('Electrical', Math.round(${origX} * s), Math.round(${origY} * s), 'TargetRoom', ${receiveRef});\n`;
+                code += `this.tasks.push(divertTask${i + 1});\n\n`;
+            }
+
+            document.getElementById('codeOutput').innerHTML = '<h3>Generated Code:</h3>\n' + code;
+        }
+
+        // Click to place task
+        taskCanvas.addEventListener('click', (e) => {
+            const rect = taskCanvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / zoom;
+            const y = (e.clientY - rect.top) / zoom;
+
+            tasks.push({
+                type: taskType,
+                x: x,
+                y: y
+            });
+
+            drawTasks();
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'g' || e.key === 'G') setTaskType('green');
+            if (e.key === 'r' || e.key === 'R') setTaskType('red');
+            if (e.key === 'b' || e.key === 'B') setTaskType('blue');
+            if (e.key === 'z' && e.ctrlKey) undoLast();
+        });
+    </script>
+</body>
+</html>

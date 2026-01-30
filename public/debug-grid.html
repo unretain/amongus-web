@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sprite Sheet Analysis</title>
+    <style>
+        body { background: #222; color: white; font-family: monospace; margin: 0; padding: 10px; }
+        .section { margin: 20px 0; }
+        .sprites { display: flex; flex-wrap: wrap; gap: 5px; }
+        .sprite { border: 1px solid #0ff; text-align: center; background: #333; padding: 5px; }
+        .sprite canvas { display: block; background: #444; }
+        .sprite p { margin: 3px 0; font-size: 10px; color: #ff0; }
+        h2 { color: #0ff; margin-top: 30px; }
+        h3 { color: #ff0; }
+        #fullSheet { max-width: 100%; border: 2px solid #0ff; }
+    </style>
+</head>
+<body>
+    <h1>Astronaut-Orange.png Analysis</h1>
+    <p id="dims"></p>
+
+    <h2>Full Sheet (scaled 50%)</h2>
+    <canvas id="fullSheet"></canvas>
+
+    <div class="section">
+        <h2>Idle Candidates (standing still poses)</h2>
+        <div id="idle" class="sprites"></div>
+    </div>
+
+    <div class="section">
+        <h2>Walk Frame Candidates (running/walking)</h2>
+        <div id="walk" class="sprites"></div>
+    </div>
+
+    <script>
+        const img = new Image();
+        img.onload = analyze;
+        img.src = '/assets/Astronaut-Orange.png';
+
+        function analyze() {
+            document.getElementById('dims').textContent = `Image: ${img.width}x${img.height}`;
+
+            // Draw full sheet at 50%
+            const fullSheet = document.getElementById('fullSheet');
+            fullSheet.width = img.width / 2;
+            fullSheet.height = img.height / 2;
+            const fsCtx = fullSheet.getContext('2d');
+            fsCtx.drawImage(img, 0, 0, img.width, img.height, 0, 0, fullSheet.width, fullSheet.height);
+
+            // Based on looking at the actual image:
+            // - Ghost sprites are in the leftmost ~90px column
+            // - The sheet seems to have sprites at various sizes
+            // - Need to find the standing idle pose and walking poses
+
+            // Let me extract specific regions that look like idle/walk based on visual inspection
+            const idleContainer = document.getElementById('idle');
+            const walkContainer = document.getElementById('walk');
+
+            // Looking at the image, trying different likely sprite locations
+            // The sprites seem to be roughly 130-180 wide and 100-200 tall
+
+            // Try extracting what looks like idle poses (standing upright)
+            // These appear to be around columns 1-2, various rows
+            const testRegions = [
+                // Potential idle regions (standing poses visible in image)
+                { x: 90, y: 0, w: 100, h: 130, label: 'Test A' },
+                { x: 190, y: 0, w: 100, h: 130, label: 'Test B' },
+                { x: 290, y: 0, w: 100, h: 130, label: 'Test C' },
+                { x: 90, y: 130, w: 100, h: 130, label: 'Test D' },
+                { x: 190, y: 130, w: 100, h: 130, label: 'Test E' },
+                { x: 290, y: 130, w: 100, h: 130, label: 'Test F' },
+                { x: 90, y: 260, w: 100, h: 130, label: 'Test G' },
+                { x: 190, y: 260, w: 100, h: 130, label: 'Test H' },
+            ];
+
+            testRegions.forEach(r => {
+                addSprite(idleContainer, r.x, r.y, r.w, r.h, r.label);
+            });
+
+            // Walk frames - try more regions
+            const walkRegions = [
+                { x: 90, y: 390, w: 120, h: 100, label: 'Walk A' },
+                { x: 210, y: 390, w: 120, h: 100, label: 'Walk B' },
+                { x: 330, y: 390, w: 120, h: 100, label: 'Walk C' },
+                { x: 90, y: 490, w: 120, h: 100, label: 'Walk D' },
+                { x: 210, y: 490, w: 120, h: 100, label: 'Walk E' },
+                { x: 330, y: 490, w: 120, h: 100, label: 'Walk F' },
+                { x: 90, y: 590, w: 120, h: 100, label: 'Walk G' },
+                { x: 210, y: 590, w: 120, h: 100, label: 'Walk H' },
+            ];
+
+            walkRegions.forEach(r => {
+                addSprite(walkContainer, r.x, r.y, r.w, r.h, r.label);
+            });
+        }
+
+        function addSprite(container, x, y, w, h, label) {
+            const div = document.createElement('div');
+            div.className = 'sprite';
+
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, x, y, w, h, 0, 0, w, h);
+
+            const p = document.createElement('p');
+            p.textContent = `${label}: (${x},${y}) ${w}x${h}`;
+
+            div.appendChild(canvas);
+            div.appendChild(p);
+            container.appendChild(div);
+        }
+    </script>
+</body>
+</html>

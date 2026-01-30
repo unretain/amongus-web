@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Task Area Debug Tool</title>
+    <style>
+        body {
+            background: #1a1a2e;
+            color: white;
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #container {
+            position: relative;
+            display: inline-block;
+            max-width: 100%;
+            max-height: 70vh;
+            overflow: auto;
+        }
+        #mapCanvas {
+            border: 2px solid #444;
+            cursor: crosshair;
+        }
+        #drawCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+        #info {
+            margin-top: 20px;
+            padding: 15px;
+            background: #2a2a4a;
+            border-radius: 8px;
+            max-width: 800px;
+        }
+        #controls {
+            margin-bottom: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #4ecdc4;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover { background: #45b7aa; }
+        button.active { background: #ff6b6b; }
+        button.yellow-active { background: #FFFF00; color: black; }
+        button.white-active { background: #FFFFFF; color: black; }
+        h1 { color: #ff6b6b; }
+        h3 { color: #4ecdc4; margin-top: 0; }
+        .coords {
+            font-family: monospace;
+            font-size: 14px;
+            color: #00ff00;
+        }
+        .coords.white { color: #FFFFFF; }
+        .coords.yellow { color: #FFFF00; }
+        #output {
+            background: #1a1a2e;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            white-space: pre;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        #linesList {
+            margin-top: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .line-item {
+            padding: 5px;
+            margin: 2px 0;
+            background: #3a3a5a;
+            border-radius: 3px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .line-item button {
+            padding: 3px 8px;
+            margin: 0;
+            background: #ff4444;
+        }
+        #mousePos {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.8);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>Task Area Debug Tool</h1>
+    <p>Click and drag to draw lines around task areas (yellow) or other areas (white). Lines will be saved and can be exported as code.</p>
+
+    <div id="mousePos">Mouse: <span id="posX">0</span>, <span id="posY">0</span></div>
+
+    <div id="controls">
+        <strong>Zoom:</strong>
+        <button onclick="setZoom(0.1)">0.1x</button>
+        <button onclick="setZoom(0.25)">0.25x</button>
+        <button onclick="setZoom(0.5)" class="active">0.5x</button>
+        <button onclick="setZoom(1)">1x</button>
+        <button onclick="setZoom(2)">2x</button>
+        <button onclick="setZoom(3)">3x</button>
+        <button onclick="setZoom(4)">4x</button>
+        <button onclick="setZoom(6)">6x</button>
+        <span style="margin-left: 20px;">Current zoom: <span id="zoomLevel">0.5x</span></span>
+        <span id="imageSize" style="margin-left: 20px;"></span>
+        <br><br>
+        <strong>Tools:</strong>
+        <button id="lineBtn" class="active" onclick="setTool('line')">Draw Line</button>
+        <button id="rectBtn" onclick="setTool('rect')">Draw Rectangle</button>
+        <button id="circleBtn" onclick="setTool('circle')">Draw Circle</button>
+        <button id="eraserBtn" onclick="setTool('eraser')">Eraser</button>
+        <button onclick="clearAll()">Clear All</button>
+        <button onclick="undoLast()">Undo Last</button>
+        <br><br>
+        <strong>Color:</strong>
+        <button id="yellowBtn" class="yellow-active" onclick="setColor('yellow')">Yellow (Tasks)</button>
+        <button id="whiteBtn" onclick="setColor('white')">White (Other)</button>
+        <br><br>
+        <strong>Numbers (Vent Connections):</strong>
+        <button id="num1Btn" onclick="setTool('number', 1)">1</button>
+        <button id="num2Btn" onclick="setTool('number', 2)">2</button>
+        <button id="num3Btn" onclick="setTool('number', 3)">3</button>
+        <button id="num4Btn" onclick="setTool('number', 4)">4</button>
+        <button id="num5Btn" onclick="setTool('number', 5)">5</button>
+        <button id="num6Btn" onclick="setTool('number', 6)">6</button>
+        <button id="num7Btn" onclick="setTool('number', 7)">7</button>
+        <button id="num8Btn" onclick="setTool('number', 8)">8</button>
+        <button id="num9Btn" onclick="setTool('number', 9)">9</button>
+        <span style="margin-left: 10px; color: #888;">Click to place number markers - same numbers = connected vents</span>
+    </div>
+
+    <div id="container">
+        <canvas id="mapCanvas"></canvas>
+        <canvas id="drawCanvas"></canvas>
+    </div>
+
+    <div id="info">
+        <h3>Drawn Shapes</h3>
+        <div id="linesList"></div>
+
+        <h3 style="margin-top: 20px;">Export Code</h3>
+        <p>Copy this code to use in your game:</p>
+        <pre id="output">// No shapes drawn yet</pre>
+        <button onclick="copyToClipboard()">Copy to Clipboard</button>
+    </div>
+
+    <script>
+        const mapCanvas = document.getElementById('mapCanvas');
+        const mapCtx = mapCanvas.getContext('2d');
+        const drawCanvas = document.getElementById('drawCanvas');
+        const drawCtx = drawCanvas.getContext('2d');
+
+        let img = new Image();
+        let zoom = 0.5;
+        let tool = 'line';
+        let currentColor = 'yellow';
+        let currentNumber = 1;
+        let isDrawing = false;
+        let startX, startY, endX, endY;
+
+        // Pre-loaded shapes from existing task outlines
+        let shapes = [
+            // Yellow task shapes
+            { type: 'rect', x1: 1850, y1: 661, x2: 1923, y2: 707, color: 'yellow' },
+            { type: 'rect', x1: 2153, y1: 2054, x2: 2221, y2: 2102, color: 'yellow' },
+            { type: 'line', x1: 2497, y1: 1684, x2: 2547, y2: 1643, color: 'yellow' },
+            { type: 'line', x1: 2497, y1: 1679, x2: 2489, y2: 1730, color: 'yellow' },
+            { type: 'line', x1: 2489, y1: 1730, x2: 2547, y2: 1693, color: 'yellow' },
+            { type: 'line', x1: 2547, y1: 1693, x2: 2565, y2: 1709, color: 'yellow' },
+            { type: 'line', x1: 2565, y1: 1708, x2: 2550, y2: 1746, color: 'yellow' },
+            { type: 'line', x1: 2550, y1: 1747, x2: 2552, y2: 1762, color: 'yellow' },
+            { type: 'line', x1: 2553, y1: 1762, x2: 2714, y2: 1763, color: 'yellow' },
+            { type: 'line', x1: 2714, y1: 1763, x2: 2719, y2: 1747, color: 'yellow' },
+            { type: 'line', x1: 2719, y1: 1747, x2: 2703, y2: 1713, color: 'yellow' },
+            { type: 'line', x1: 2703, y1: 1713, x2: 2706, y2: 1693, color: 'yellow' },
+            { type: 'line', x1: 2706, y1: 1693, x2: 2785, y2: 1741, color: 'yellow' },
+            { type: 'line', x1: 2786, y1: 1741, x2: 2775, y2: 1687, color: 'yellow' },
+            { type: 'line', x1: 2775, y1: 1687, x2: 2724, y2: 1647, color: 'yellow' },
+            { type: 'line', x1: 2724, y1: 1647, x2: 2712, y2: 1638, color: 'yellow' },
+            { type: 'line', x1: 2712, y1: 1638, x2: 2709, y2: 1621, color: 'yellow' },
+            { type: 'line', x1: 2709, y1: 1621, x2: 2552, y2: 1619, color: 'yellow' },
+            { type: 'line', x1: 2552, y1: 1620, x2: 2547, y2: 1639, color: 'yellow' },
+            { type: 'line', x1: 2790, y1: 1762, x2: 2790, y2: 1810, color: 'yellow' },
+            { type: 'line', x1: 2790, y1: 1810, x2: 2831, y2: 1842, color: 'yellow' },
+            { type: 'line', x1: 2831, y1: 1842, x2: 2834, y2: 1791, color: 'yellow' },
+            { type: 'line', x1: 2834, y1: 1791, x2: 2794, y2: 1760, color: 'yellow' },
+            { type: 'rect', x1: 1712, y1: 2889, x2: 1784, y2: 2941, color: 'yellow' },
+            { type: 'rect', x1: 1348, y1: 1788, x2: 1424, y2: 1843, color: 'yellow' },
+            { type: 'rect', x1: 1492, y1: 3473, x2: 1590, y2: 3570, color: 'yellow' },
+            { type: 'line', x1: 5119, y1: 4250, x2: 5120, y2: 4210, color: 'yellow' },
+            { type: 'line', x1: 5120, y1: 4210, x2: 5137, y2: 4210, color: 'yellow' },
+            { type: 'line', x1: 5138, y1: 4210, x2: 5141, y2: 4223, color: 'yellow' },
+            { type: 'line', x1: 5141, y1: 4223, x2: 5146, y2: 4256, color: 'yellow' },
+            { type: 'line', x1: 5119, y1: 4249, x2: 5116, y2: 4259, color: 'yellow' },
+            { type: 'line', x1: 5117, y1: 4259, x2: 5151, y2: 4299, color: 'yellow' },
+            { type: 'line', x1: 5146, y1: 4255, x2: 5157, y2: 4252, color: 'yellow' },
+            { type: 'line', x1: 5157, y1: 4252, x2: 5157, y2: 4300, color: 'yellow' },
+            { type: 'rect', x1: 4607, y1: 2797, x2: 4676, y2: 2844, color: 'yellow' },
+            { type: 'rect', x1: 5202, y1: 2382, x2: 5272, y2: 2429, color: 'yellow' },
+            { type: 'rect', x1: 5403, y1: 2347, x2: 5476, y2: 2408, color: 'yellow' },
+            { type: 'line', x1: 5963, y1: 2864, x2: 5964, y2: 2727, color: 'yellow' },
+            { type: 'line', x1: 5970, y1: 2727, x2: 6039, y2: 2733, color: 'yellow' },
+            { type: 'line', x1: 6039, y1: 2734, x2: 6039, y2: 2788, color: 'yellow' },
+            { type: 'line', x1: 6040, y1: 2788, x2: 6019, y2: 2786, color: 'yellow' },
+            { type: 'line', x1: 6023, y1: 2786, x2: 6020, y2: 2878, color: 'yellow' },
+            { type: 'line', x1: 6020, y1: 2878, x2: 5962, y2: 2871, color: 'yellow' },
+            { type: 'rect', x1: 6121, y1: 2373, x2: 6178, y2: 2433, color: 'yellow' },
+            { type: 'line', x1: 5850, y1: 1901, x2: 5894, y2: 1859, color: 'yellow' },
+            { type: 'line', x1: 5894, y1: 1859, x2: 5888, y2: 1832, color: 'yellow' },
+            { type: 'line', x1: 5888, y1: 1832, x2: 5881, y2: 1822, color: 'yellow' },
+            { type: 'line', x1: 5882, y1: 1822, x2: 5894, y2: 1814, color: 'yellow' },
+            { type: 'line', x1: 5894, y1: 1815, x2: 5899, y2: 1798, color: 'yellow' },
+            { type: 'line', x1: 5899, y1: 1798, x2: 5886, y2: 1786, color: 'yellow' },
+            { type: 'line', x1: 5885, y1: 1786, x2: 5872, y2: 1793, color: 'yellow' },
+            { type: 'line', x1: 5872, y1: 1793, x2: 5869, y2: 1803, color: 'yellow' },
+            { type: 'line', x1: 5869, y1: 1803, x2: 5854, y2: 1818, color: 'yellow' },
+            { type: 'line', x1: 5854, y1: 1818, x2: 5837, y2: 1827, color: 'yellow' },
+            { type: 'line', x1: 5837, y1: 1827, x2: 5837, y2: 1849, color: 'yellow' },
+            { type: 'line', x1: 5837, y1: 1848, x2: 5850, y2: 1851, color: 'yellow' },
+            { type: 'line', x1: 5852, y1: 1850, x2: 5852, y2: 1858, color: 'yellow' },
+            { type: 'line', x1: 5852, y1: 1858, x2: 5839, y2: 1868, color: 'yellow' },
+            { type: 'line', x1: 5842, y1: 1868, x2: 5849, y2: 1895, color: 'yellow' },
+            { type: 'rect', x1: 6170, y1: 1734, x2: 6223, y2: 1792, color: 'yellow' },
+            { type: 'rect', x1: 6461, y1: 1671, x2: 6536, y2: 1726, color: 'yellow' },
+            { type: 'rect', x1: 7569, y1: 1908, x2: 7640, y2: 1959, color: 'yellow' },
+            { type: 'rect', x1: 7834, y1: 1666, x2: 7913, y2: 1721, color: 'yellow' },
+            { type: 'rect', x1: 8018, y1: 1665, x2: 8087, y2: 1721, color: 'yellow' },
+            { type: 'line', x1: 8289, y1: 2014, x2: 8289, y2: 1969, color: 'yellow' },
+            { type: 'line', x1: 8289, y1: 1969, x2: 8311, y2: 1949, color: 'yellow' },
+            { type: 'line', x1: 8311, y1: 1949, x2: 8426, y2: 1964, color: 'yellow' },
+            { type: 'line', x1: 8428, y1: 1965, x2: 8433, y2: 1983, color: 'yellow' },
+            { type: 'line', x1: 8292, y1: 2010, x2: 8316, y2: 2024, color: 'yellow' },
+            { type: 'line', x1: 8317, y1: 2023, x2: 8334, y2: 2066, color: 'yellow' },
+            { type: 'line', x1: 8334, y1: 2066, x2: 8341, y2: 2148, color: 'yellow' },
+            { type: 'line', x1: 8343, y1: 2148, x2: 8298, y2: 2175, color: 'yellow' },
+            { type: 'line', x1: 8298, y1: 2175, x2: 8310, y2: 2210, color: 'yellow' },
+            { type: 'line', x1: 8311, y1: 2210, x2: 8319, y2: 2238, color: 'yellow' },
+            { type: 'line', x1: 8323, y1: 2243, x2: 8350, y2: 2261, color: 'yellow' },
+            { type: 'line', x1: 8351, y1: 2261, x2: 8433, y2: 2197, color: 'yellow' },
+            { type: 'line', x1: 8322, y1: 2166, x2: 8351, y2: 2197, color: 'yellow' },
+            { type: 'line', x1: 8352, y1: 2195, x2: 8434, y2: 2137, color: 'yellow' },
+            { type: 'line', x1: 8434, y1: 2137, x2: 8430, y2: 1981, color: 'yellow' },
+            { type: 'line', x1: 8173, y1: 2046, x2: 8203, y2: 2145, color: 'yellow' },
+            { type: 'line', x1: 8204, y1: 2145, x2: 8296, y2: 2144, color: 'yellow' },
+            { type: 'line', x1: 8297, y1: 2142, x2: 8314, y2: 2069, color: 'yellow' },
+            { type: 'line', x1: 8313, y1: 2063, x2: 8247, y2: 2062, color: 'yellow' },
+            { type: 'line', x1: 8247, y1: 2059, x2: 8226, y2: 1982, color: 'yellow' },
+            { type: 'line', x1: 8226, y1: 1985, x2: 8204, y2: 1983, color: 'yellow' },
+            { type: 'line', x1: 8204, y1: 1983, x2: 8162, y2: 2029, color: 'yellow' },
+            { type: 'line', x1: 8166, y1: 2031, x2: 8167, y2: 2054, color: 'yellow' },
+            { type: 'line', x1: 6503, y1: 993, x2: 6507, y2: 922, color: 'yellow' },
+            { type: 'line', x1: 6508, y1: 922, x2: 6504, y2: 908, color: 'yellow' },
+            { type: 'line', x1: 6504, y1: 907, x2: 6521, y2: 885, color: 'yellow' },
+            { type: 'line', x1: 6521, y1: 884, x2: 6539, y2: 886, color: 'yellow' },
+            { type: 'line', x1: 6539, y1: 885, x2: 6588, y2: 853, color: 'yellow' },
+            { type: 'line', x1: 6589, y1: 853, x2: 6650, y2: 842, color: 'yellow' },
+            { type: 'line', x1: 6651, y1: 843, x2: 6715, y2: 856, color: 'yellow' },
+            { type: 'line', x1: 6718, y1: 856, x2: 6737, y2: 843, color: 'yellow' },
+            { type: 'line', x1: 6737, y1: 843, x2: 6763, y2: 865, color: 'yellow' },
+            { type: 'line', x1: 6764, y1: 865, x2: 6767, y2: 889, color: 'yellow' },
+            { type: 'line', x1: 6769, y1: 889, x2: 6797, y2: 951, color: 'yellow' },
+            { type: 'line', x1: 6797, y1: 956, x2: 6815, y2: 976, color: 'yellow' },
+            { type: 'line', x1: 6820, y1: 978, x2: 6824, y2: 1015, color: 'yellow' },
+            { type: 'line', x1: 6825, y1: 1016, x2: 6808, y2: 1033, color: 'yellow' },
+            { type: 'line', x1: 6808, y1: 1033, x2: 6785, y2: 1028, color: 'yellow' },
+            { type: 'line', x1: 6787, y1: 1028, x2: 6761, y2: 1054, color: 'yellow' },
+            { type: 'line', x1: 6761, y1: 1054, x2: 6745, y2: 1052, color: 'yellow' },
+            { type: 'line', x1: 6745, y1: 1052, x2: 6692, y2: 1070, color: 'yellow' },
+            { type: 'line', x1: 6692, y1: 1071, x2: 6634, y2: 1077, color: 'yellow' },
+            { type: 'line', x1: 6634, y1: 1077, x2: 6602, y2: 1076, color: 'yellow' },
+            { type: 'line', x1: 6602, y1: 1076, x2: 6596, y2: 1081, color: 'yellow' },
+            { type: 'line', x1: 6596, y1: 1080, x2: 6562, y2: 1067, color: 'yellow' },
+            { type: 'line', x1: 6563, y1: 1067, x2: 6540, y2: 1073, color: 'yellow' },
+            { type: 'line', x1: 6544, y1: 1075, x2: 6520, y2: 1061, color: 'yellow' },
+            { type: 'line', x1: 6520, y1: 1061, x2: 6524, y2: 1037, color: 'yellow' },
+            { type: 'line', x1: 6525, y1: 1037, x2: 6504, y2: 999, color: 'yellow' },
+            { type: 'line', x1: 6559, y1: 964, x2: 6542, y2: 892, color: 'yellow' },
+            { type: 'line', x1: 6541, y1: 887, x2: 6545, y2: 871, color: 'yellow' },
+            { type: 'line', x1: 6545, y1: 871, x2: 6568, y2: 866, color: 'yellow' },
+            { type: 'line', x1: 6568, y1: 866, x2: 6622, y2: 921, color: 'yellow' },
+            { type: 'line', x1: 6624, y1: 921, x2: 6635, y2: 967, color: 'yellow' },
+            { type: 'line', x1: 6635, y1: 966, x2: 6686, y2: 946, color: 'yellow' },
+            { type: 'line', x1: 6686, y1: 944, x2: 6688, y2: 975, color: 'yellow' },
+            { type: 'line', x1: 6688, y1: 974, x2: 6620, y2: 1005, color: 'yellow' },
+            { type: 'line', x1: 6621, y1: 1005, x2: 6560, y2: 965, color: 'yellow' },
+            { type: 'line', x1: 6615, y1: 903, x2: 6620, y2: 900, color: 'yellow' },
+            { type: 'line', x1: 6622, y1: 900, x2: 6690, y2: 940, color: 'yellow' },
+            { type: 'line', x1: 6648, y1: 833, x2: 6650, y2: 703, color: 'yellow' },
+            { type: 'line', x1: 6650, y1: 699, x2: 6790, y2: 760, color: 'yellow' },
+            { type: 'line', x1: 6790, y1: 760, x2: 6778, y2: 891, color: 'yellow' },
+            { type: 'rect', x1: 6514, y1: 511, x2: 6585, y2: 574, color: 'yellow' },
+            { type: 'line', x1: 5591, y1: 373, x2: 5592, y2: 316, color: 'yellow' },
+            { type: 'line', x1: 5593, y1: 318, x2: 5642, y2: 361, color: 'yellow' },
+            { type: 'line', x1: 5642, y1: 361, x2: 5638, y2: 417, color: 'yellow' },
+            { type: 'line', x1: 5639, y1: 417, x2: 5589, y2: 380, color: 'yellow' },
+            { type: 'line', x1: 5775, y1: 556, x2: 5775, y2: 529, color: 'yellow' },
+            { type: 'line', x1: 5777, y1: 529, x2: 5783, y2: 521, color: 'yellow' },
+            { type: 'line', x1: 5780, y1: 519, x2: 5772, y2: 505, color: 'yellow' },
+            { type: 'line', x1: 5772, y1: 504, x2: 5781, y2: 496, color: 'yellow' },
+            { type: 'line', x1: 5783, y1: 496, x2: 5794, y2: 505, color: 'yellow' },
+            { type: 'line', x1: 5794, y1: 504, x2: 5822, y2: 529, color: 'yellow' },
+            { type: 'line', x1: 5823, y1: 530, x2: 5815, y2: 549, color: 'yellow' },
+            { type: 'line', x1: 5815, y1: 549, x2: 5805, y2: 552, color: 'yellow' },
+            { type: 'line', x1: 5808, y1: 552, x2: 5816, y2: 567, color: 'yellow' },
+            { type: 'line', x1: 5818, y1: 567, x2: 5812, y2: 592, color: 'yellow' },
+            { type: 'line', x1: 5812, y1: 593, x2: 5775, y2: 562, color: 'yellow' },
+            { type: 'line', x1: 4010, y1: 298, x2: 4057, y2: 258, color: 'yellow' },
+            { type: 'line', x1: 4063, y1: 260, x2: 4064, y2: 314, color: 'yellow' },
+            { type: 'line', x1: 4064, y1: 315, x2: 4019, y2: 359, color: 'yellow' },
+            { type: 'line', x1: 4019, y1: 358, x2: 4012, y2: 300, color: 'yellow' },
+            { type: 'line', x1: 7023, y1: 890, x2: 7027, y2: 829, color: 'yellow' },
+            { type: 'line', x1: 7035, y1: 831, x2: 7075, y2: 874, color: 'yellow' },
+            { type: 'line', x1: 7075, y1: 874, x2: 7071, y2: 922, color: 'yellow' },
+            { type: 'line', x1: 7071, y1: 925, x2: 7023, y2: 885, color: 'yellow' },
+            { type: 'rect', x1: 6884, y1: 3050, x2: 6964, y2: 3108, color: 'yellow' },
+            { type: 'rect', x1: 6064, y1: 3764, x2: 6140, y2: 3816, color: 'yellow' },
+            { type: 'line', x1: 6322, y1: 3774, x2: 6318, y2: 3710, color: 'yellow' },
+            { type: 'line', x1: 6322, y1: 3708, x2: 6394, y2: 3708, color: 'yellow' },
+            { type: 'line', x1: 6322, y1: 3774, x2: 6396, y2: 3774, color: 'yellow' },
+            { type: 'line', x1: 6396, y1: 3770, x2: 6392, y2: 3708, color: 'yellow' },
+            { type: 'rect', x1: 5650, y1: 3738, x2: 5726, y2: 3792, color: 'yellow' },
+            { type: 'line', x1: 3508, y1: 2212, x2: 3546, y2: 2144, color: 'yellow' },
+            { type: 'line', x1: 3556, y1: 2140, x2: 3574, y2: 2162, color: 'yellow' },
+            { type: 'line', x1: 3572, y1: 2160, x2: 3646, y2: 2128, color: 'yellow' },
+            { type: 'line', x1: 3656, y1: 2108, x2: 3686, y2: 2092, color: 'yellow' },
+            { type: 'line', x1: 3698, y1: 2094, x2: 3718, y2: 2128, color: 'yellow' },
+            { type: 'line', x1: 3722, y1: 2126, x2: 3784, y2: 2150, color: 'yellow' },
+            { type: 'line', x1: 3790, y1: 2150, x2: 3830, y2: 2220, color: 'yellow' },
+            { type: 'line', x1: 3834, y1: 2222, x2: 3804, y2: 2238, color: 'yellow' },
+            { type: 'line', x1: 3802, y1: 2238, x2: 3732, y2: 2276, color: 'yellow' },
+            { type: 'line', x1: 3728, y1: 2274, x2: 3682, y2: 2290, color: 'yellow' },
+            { type: 'line', x1: 3682, y1: 2290, x2: 3644, y2: 2276, color: 'yellow' },
+            { type: 'line', x1: 3646, y1: 2276, x2: 3558, y2: 2228, color: 'yellow' },
+            { type: 'line', x1: 3560, y1: 2228, x2: 3496, y2: 2206, color: 'yellow' },
+            { type: 'line', x1: 3570, y1: 2182, x2: 3612, y2: 2224, color: 'yellow' },
+            { type: 'line', x1: 3616, y1: 2224, x2: 3662, y2: 2230, color: 'yellow' },
+            { type: 'line', x1: 3664, y1: 2228, x2: 3684, y2: 2206, color: 'yellow' },
+            { type: 'line', x1: 3696, y1: 2204, x2: 3710, y2: 2226, color: 'yellow' },
+            { type: 'line', x1: 3712, y1: 2228, x2: 3774, y2: 2204, color: 'yellow' },
+            { type: 'line', x1: 3828, y1: 2024, x2: 3894, y2: 2102, color: 'yellow' },
+            { type: 'line', x1: 3894, y1: 2102, x2: 3956, y2: 2092, color: 'yellow' },
+            { type: 'line', x1: 3960, y1: 2088, x2: 3962, y2: 2142, color: 'yellow' },
+            { type: 'line', x1: 3960, y1: 2140, x2: 3888, y2: 2110, color: 'yellow' },
+            { type: 'line', x1: 3824, y1: 2018, x2: 3868, y2: 2012, color: 'yellow' },
+            { type: 'line', x1: 3872, y1: 2012, x2: 3872, y2: 1984, color: 'yellow' },
+            { type: 'line', x1: 3872, y1: 1980, x2: 3850, y2: 1992, color: 'yellow' },
+            { type: 'line', x1: 3850, y1: 1992, x2: 3802, y2: 1984, color: 'yellow' },
+            { type: 'line', x1: 3802, y1: 1984, x2: 3796, y2: 1906, color: 'yellow' },
+            { type: 'line', x1: 3796, y1: 1906, x2: 3858, y2: 1930, color: 'yellow' },
+            { type: 'line', x1: 3862, y1: 1928, x2: 3882, y2: 1918, color: 'yellow' },
+            { type: 'line', x1: 3882, y1: 1916, x2: 3978, y2: 2006, color: 'yellow' },
+            { type: 'line', x1: 3978, y1: 2000, x2: 3980, y2: 2102, color: 'yellow' },
+            { type: 'line', x1: 3980, y1: 2102, x2: 3886, y2: 2018, color: 'yellow' },
+            { type: 'rect', x1: 3560, y1: 2610, x2: 3632, y2: 2658, color: 'yellow' },
+            { type: 'rect', x1: 3324, y1: 2538, x2: 3408, y2: 2590, color: 'yellow' },
+            { type: 'rect', x1: 3190, y1: 2534, x2: 3280, y2: 2596, color: 'yellow' },
+            { type: 'rect', x1: 3890, y1: 2548, x2: 3982, y2: 2656, color: 'yellow' },
+            { type: 'line', x1: 4438, y1: 3786, x2: 4506, y2: 3810, color: 'yellow' },
+            { type: 'line', x1: 4508, y1: 3810, x2: 4508, y2: 3728, color: 'yellow' },
+            { type: 'line', x1: 4440, y1: 3782, x2: 4446, y2: 3722, color: 'yellow' },
+            { type: 'line', x1: 4518, y1: 3726, x2: 4464, y2: 3708, color: 'yellow' },
+            { type: 'line', x1: 1486, y1: 1284, x2: 1486, y2: 1378, color: 'yellow' },
+            { type: 'line', x1: 1486, y1: 1378, x2: 1590, y2: 1378, color: 'yellow' },
+            { type: 'line', x1: 1590, y1: 1376, x2: 1578, y2: 1282, color: 'yellow' },
+            { type: 'line', x1: 1578, y1: 1282, x2: 1496, y2: 1284, color: 'yellow' },
+            { type: 'line', x1: 6010, y1: 1778, x2: 6016, y2: 1860, color: 'yellow' },
+            { type: 'line', x1: 6016, y1: 1860, x2: 6070, y2: 1800, color: 'yellow' },
+            { type: 'line', x1: 6070, y1: 1800, x2: 6066, y2: 1730, color: 'yellow' },
+            { type: 'line', x1: 6066, y1: 1728, x2: 6008, y2: 1774, color: 'yellow' },
+            { type: 'line', x1: 5922, y1: 1850, x2: 5974, y2: 1860, color: 'yellow' },
+            { type: 'line', x1: 5974, y1: 1858, x2: 6008, y2: 1832, color: 'yellow' },
+            { type: 'line', x1: 5914, y1: 1844, x2: 5938, y2: 1780, color: 'yellow' },
+            { type: 'line', x1: 5938, y1: 1780, x2: 5970, y2: 1786, color: 'yellow' },
+            { type: 'line', x1: 5972, y1: 1786, x2: 6034, y2: 1726, color: 'yellow' },
+            { type: 'line', x1: 6034, y1: 1726, x2: 6054, y2: 1726, color: 'yellow' },
+            { type: 'line', x1: 5976, y1: 1784, x2: 6008, y2: 1780, color: 'yellow' },
+            { type: 'line', x1: 1014, y1: 2290, x2: 1024, y2: 2234, color: 'yellow' },
+            { type: 'line', x1: 1024, y1: 2232, x2: 1044, y2: 2200, color: 'yellow' },
+            { type: 'line', x1: 1044, y1: 2200, x2: 1118, y2: 2224, color: 'yellow' },
+            { type: 'line', x1: 1120, y1: 2226, x2: 1094, y2: 2262, color: 'yellow' },
+            { type: 'line', x1: 1094, y1: 2264, x2: 1100, y2: 2318, color: 'yellow' },
+            { type: 'line', x1: 1102, y1: 2318, x2: 1028, y2: 2304, color: 'yellow' },
+            { type: 'line', x1: 1096, y1: 2314, x2: 1122, y2: 2284, color: 'yellow' },
+            { type: 'line', x1: 1122, y1: 2282, x2: 1120, y2: 2232, color: 'yellow' },
+            { type: 'line', x1: 910, y1: 1684, x2: 952, y2: 1668, color: 'yellow' },
+            { type: 'line', x1: 956, y1: 1670, x2: 966, y2: 1688, color: 'yellow' },
+            { type: 'line', x1: 934, y1: 1700, x2: 966, y2: 1688, color: 'yellow' },
+            { type: 'line', x1: 912, y1: 1708, x2: 930, y2: 1698, color: 'yellow' },
+            { type: 'line', x1: 916, y1: 1710, x2: 910, y2: 1682, color: 'yellow' },
+            // White vent shapes
+            { type: 'rect', x1: 1004, y1: 1778, x2: 1100, y2: 1850, color: 'white' },
+            { type: 'rect', x1: 1196, y1: 2474, x2: 1300, y2: 2552, color: 'white' },
+            { type: 'rect', x1: 2092, y1: 1762, x2: 2192, y2: 1842, color: 'white' },
+            { type: 'rect', x1: 2476, y1: 2450, x2: 2576, y2: 2534, color: 'white' },
+            { type: 'rect', x1: 1636, y1: 3194, x2: 1732, y2: 3274, color: 'white' },
+            { type: 'rect', x1: 4632, y1: 2106, x2: 4732, y2: 2186, color: 'white' },
+            { type: 'rect', x1: 5900, y1: 2358, x2: 6000, y2: 2438, color: 'white' },
+            { type: 'rect', x1: 6476, y1: 1362, x2: 6572, y2: 1446, color: 'white' },
+            { type: 'rect', x1: 7452, y1: 1666, x2: 7548, y2: 1746, color: 'white' },
+            { type: 'rect', x1: 8084, y1: 1358, x2: 8180, y2: 1442, color: 'white' },
+            { type: 'rect', x1: 6828, y1: 2718, x2: 6924, y2: 2802, color: 'white' },
+            { type: 'rect', x1: 6204, y1: 3510, x2: 6300, y2: 3594, color: 'white' },
+            { type: 'rect', x1: 3820, y1: 2282, x2: 3916, y2: 2362, color: 'white' },
+            { type: 'rect', x1: 3500, y1: 3418, x2: 3600, y2: 3498, color: 'white' },
+            // Vent connection markers
+            { type: 'number', x1: 2232, y1: 816, x2: 2232, y2: 816, number: 1, color: 'magenta' },
+            { type: 'number', x1: 1038, y1: 1800, x2: 1038, y2: 1800, number: 1, color: 'magenta' },
+            { type: 'number', x1: 1224, y1: 2524, x2: 1224, y2: 2524, number: 2, color: 'magenta' },
+            { type: 'number', x1: 2272, y1: 3736, x2: 2272, y2: 3736, number: 2, color: 'magenta' },
+            { type: 'number', x1: 2732, y1: 2506, x2: 2732, y2: 2506, number: 3, color: 'magenta' },
+            { type: 'number', x1: 3100, y1: 1998, x2: 3100, y2: 1998, number: 3, color: 'magenta' },
+            { type: 'number', x1: 3250, y1: 2712, x2: 3250, y2: 2712, number: 3, color: 'magenta' },
+            { type: 'number', x1: 5456, y1: 3062, x2: 5456, y2: 3062, number: 4, color: 'magenta' },
+            { type: 'number', x1: 6716, y1: 3830, x2: 6716, y2: 3830, number: 4, color: 'magenta' },
+            { type: 'number', x1: 6688, y1: 2426, x2: 6688, y2: 2426, number: 4, color: 'magenta' },
+            { type: 'number', x1: 7862, y1: 2426, x2: 7862, y2: 2426, number: 4, color: 'magenta' },
+            { type: 'number', x1: 7882, y1: 1846, x2: 7882, y2: 1846, number: 5, color: 'magenta' },
+            { type: 'number', x1: 6564, y1: 654, x2: 6564, y2: 654, number: 5, color: 'magenta' },
+            { type: 'number', x1: 5776, y1: 1292, x2: 5776, y2: 1292, number: 5, color: 'magenta' },
+        ];
+
+        img.onload = function() {
+            document.getElementById('imageSize').textContent = `Map: ${img.width} x ${img.height}`;
+            resizeCanvases();
+            redraw();
+        };
+        img.src = '/assets/skeld-full.webp';
+
+        function resizeCanvases() {
+            mapCanvas.width = img.width * zoom;
+            mapCanvas.height = img.height * zoom;
+            drawCanvas.width = mapCanvas.width;
+            drawCanvas.height = mapCanvas.height;
+            mapCtx.imageSmoothingEnabled = false;
+            mapCtx.drawImage(img, 0, 0, mapCanvas.width, mapCanvas.height);
+        }
+
+        function setZoom(z) {
+            zoom = z;
+            document.getElementById('zoomLevel').textContent = z + 'x';
+            document.querySelectorAll('#controls button').forEach(b => {
+                if (b.textContent.includes('x') && !b.id) b.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            resizeCanvases();
+            redraw();
+        }
+
+        function setTool(t, num) {
+            tool = t;
+            if (num) currentNumber = num;
+
+            // Remove active from all tool buttons
+            document.getElementById('lineBtn').classList.remove('active');
+            document.getElementById('rectBtn').classList.remove('active');
+            document.getElementById('circleBtn').classList.remove('active');
+            document.getElementById('eraserBtn').classList.remove('active');
+            for (let i = 1; i <= 9; i++) {
+                document.getElementById('num' + i + 'Btn').classList.remove('active');
+            }
+
+            // Add active to selected tool
+            if (t === 'number') {
+                document.getElementById('num' + num + 'Btn').classList.add('active');
+            } else {
+                document.getElementById(t + 'Btn').classList.add('active');
+            }
+
+            // Change cursor for eraser
+            mapCanvas.style.cursor = t === 'eraser' ? 'pointer' : 'crosshair';
+        }
+
+        function setColor(c) {
+            currentColor = c;
+            document.getElementById('yellowBtn').classList.remove('yellow-active');
+            document.getElementById('whiteBtn').classList.remove('white-active');
+            document.getElementById(c + 'Btn').classList.add(c + '-active');
+        }
+
+        function getStrokeColor(color) {
+            return color === 'white' ? '#FFFFFF' : '#FFFF00';
+        }
+
+        function redraw() {
+            // Redraw map
+            mapCtx.drawImage(img, 0, 0, mapCanvas.width, mapCanvas.height);
+
+            // Clear draw canvas
+            drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+
+            // Draw all saved shapes
+            drawCtx.lineWidth = 4;
+            drawCtx.lineCap = 'round';
+            drawCtx.lineJoin = 'round';
+
+            for (const shape of shapes) {
+                const x1 = shape.x1 * zoom;
+                const y1 = shape.y1 * zoom;
+                const x2 = shape.x2 * zoom;
+                const y2 = shape.y2 * zoom;
+
+                drawCtx.strokeStyle = getStrokeColor(shape.color);
+
+                if (shape.type === 'line') {
+                    drawCtx.beginPath();
+                    drawCtx.moveTo(x1, y1);
+                    drawCtx.lineTo(x2, y2);
+                    drawCtx.stroke();
+                } else if (shape.type === 'rect') {
+                    const w = x2 - x1;
+                    const h = y2 - y1;
+                    const r = 10 * zoom; // rounded corner radius
+                    drawCtx.beginPath();
+                    drawCtx.moveTo(x1 + r, y1);
+                    drawCtx.lineTo(x1 + w - r, y1);
+                    drawCtx.quadraticCurveTo(x1 + w, y1, x1 + w, y1 + r);
+                    drawCtx.lineTo(x1 + w, y1 + h - r);
+                    drawCtx.quadraticCurveTo(x1 + w, y1 + h, x1 + w - r, y1 + h);
+                    drawCtx.lineTo(x1 + r, y1 + h);
+                    drawCtx.quadraticCurveTo(x1, y1 + h, x1, y1 + h - r);
+                    drawCtx.lineTo(x1, y1 + r);
+                    drawCtx.quadraticCurveTo(x1, y1, x1 + r, y1);
+                    drawCtx.closePath();
+                    drawCtx.stroke();
+                } else if (shape.type === 'circle') {
+                    const radius = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+                    drawCtx.beginPath();
+                    drawCtx.arc(x1, y1, radius, 0, Math.PI * 2);
+                    drawCtx.stroke();
+                } else if (shape.type === 'number') {
+                    // Draw number marker for vent connections
+                    const radius = 20 * zoom;
+                    drawCtx.fillStyle = '#FF00FF';
+                    drawCtx.beginPath();
+                    drawCtx.arc(x1, y1, radius, 0, Math.PI * 2);
+                    drawCtx.fill();
+                    drawCtx.strokeStyle = '#FFFFFF';
+                    drawCtx.lineWidth = 2;
+                    drawCtx.stroke();
+                    // Draw number
+                    drawCtx.fillStyle = '#FFFFFF';
+                    drawCtx.font = `bold ${Math.round(24 * zoom)}px Arial`;
+                    drawCtx.textAlign = 'center';
+                    drawCtx.textBaseline = 'middle';
+                    drawCtx.fillText(shape.number.toString(), x1, y1);
+                }
+            }
+
+            updateOutput();
+        }
+
+        mapCanvas.addEventListener('mousedown', (e) => {
+            isDrawing = true;
+            const rect = mapCanvas.getBoundingClientRect();
+            startX = Math.floor((e.clientX - rect.left) / zoom);
+            startY = Math.floor((e.clientY - rect.top) / zoom);
+        });
+
+        mapCanvas.addEventListener('mousemove', (e) => {
+            const rect = mapCanvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / zoom);
+            const y = Math.floor((e.clientY - rect.top) / zoom);
+
+            document.getElementById('posX').textContent = x;
+            document.getElementById('posY').textContent = y;
+
+            if (isDrawing) {
+                endX = x;
+                endY = y;
+
+                // Preview current shape
+                redraw();
+                drawCtx.strokeStyle = getStrokeColor(currentColor);
+                drawCtx.lineWidth = 4;
+                drawCtx.lineCap = 'round';
+                drawCtx.lineJoin = 'round';
+
+                const sx = startX * zoom;
+                const sy = startY * zoom;
+                const ex = endX * zoom;
+                const ey = endY * zoom;
+
+                if (tool === 'line') {
+                    drawCtx.beginPath();
+                    drawCtx.moveTo(sx, sy);
+                    drawCtx.lineTo(ex, ey);
+                    drawCtx.stroke();
+                } else if (tool === 'rect') {
+                    const w = ex - sx;
+                    const h = ey - sy;
+                    const r = 10 * zoom;
+                    drawCtx.beginPath();
+                    drawCtx.moveTo(sx + r, sy);
+                    drawCtx.lineTo(sx + w - r, sy);
+                    drawCtx.quadraticCurveTo(sx + w, sy, sx + w, sy + r);
+                    drawCtx.lineTo(sx + w, sy + h - r);
+                    drawCtx.quadraticCurveTo(sx + w, sy + h, sx + w - r, sy + h);
+                    drawCtx.lineTo(sx + r, sy + h);
+                    drawCtx.quadraticCurveTo(sx, sy + h, sx, sy + h - r);
+                    drawCtx.lineTo(sx, sy + r);
+                    drawCtx.quadraticCurveTo(sx, sy, sx + r, sy);
+                    drawCtx.closePath();
+                    drawCtx.stroke();
+                } else if (tool === 'circle') {
+                    const radius = Math.sqrt(Math.pow(ex - sx, 2) + Math.pow(ey - sy, 2));
+                    drawCtx.beginPath();
+                    drawCtx.arc(sx, sy, radius, 0, Math.PI * 2);
+                    drawCtx.stroke();
+                }
+            }
+        });
+
+        mapCanvas.addEventListener('mouseup', () => {
+            if (isDrawing) {
+                if (tool === 'eraser') {
+                    // Find and remove shape at click location
+                    const clickX = startX;
+                    const clickY = startY;
+                    const eraseRadius = 30; // Tolerance for erasing
+
+                    for (let i = shapes.length - 1; i >= 0; i--) {
+                        const shape = shapes[i];
+                        if (isNearShape(clickX, clickY, shape, eraseRadius)) {
+                            shapes.splice(i, 1);
+                            redraw();
+                            break; // Only remove one shape per click
+                        }
+                    }
+                } else if (tool === 'number') {
+                    // Number markers are placed with a single click
+                    shapes.push({
+                        type: 'number',
+                        x1: startX,
+                        y1: startY,
+                        x2: startX,
+                        y2: startY,
+                        number: currentNumber,
+                        color: 'magenta'
+                    });
+                    redraw();
+                } else if (startX !== endX || startY !== endY) {
+                    shapes.push({
+                        type: tool,
+                        x1: startX,
+                        y1: startY,
+                        x2: endX,
+                        y2: endY,
+                        color: currentColor
+                    });
+                    redraw();
+                }
+            }
+            isDrawing = false;
+        });
+
+        // Helper function to check if a point is near a shape
+        function isNearShape(x, y, shape, tolerance) {
+            if (shape.type === 'number') {
+                // For number markers, check distance to center
+                const dx = x - shape.x1;
+                const dy = y - shape.y1;
+                return Math.sqrt(dx * dx + dy * dy) < tolerance;
+            } else if (shape.type === 'rect') {
+                // For rectangles, check if click is inside or near the border
+                const inX = x >= shape.x1 - tolerance && x <= shape.x2 + tolerance;
+                const inY = y >= shape.y1 - tolerance && y <= shape.y2 + tolerance;
+                if (inX && inY) {
+                    // Check if near the border (not too far inside)
+                    const nearLeft = Math.abs(x - shape.x1) < tolerance;
+                    const nearRight = Math.abs(x - shape.x2) < tolerance;
+                    const nearTop = Math.abs(y - shape.y1) < tolerance;
+                    const nearBottom = Math.abs(y - shape.y2) < tolerance;
+                    return nearLeft || nearRight || nearTop || nearBottom;
+                }
+                return false;
+            } else if (shape.type === 'line') {
+                // For lines, check distance to line segment
+                return distToLineSegment(x, y, shape.x1, shape.y1, shape.x2, shape.y2) < tolerance;
+            } else if (shape.type === 'circle') {
+                // For circles, check distance to circumference
+                const centerDist = Math.sqrt(Math.pow(x - shape.x1, 2) + Math.pow(y - shape.y1, 2));
+                const radius = Math.sqrt(Math.pow(shape.x2 - shape.x1, 2) + Math.pow(shape.y2 - shape.y1, 2));
+                return Math.abs(centerDist - radius) < tolerance;
+            }
+            return false;
+        }
+
+        // Helper to calculate distance from point to line segment
+        function distToLineSegment(px, py, x1, y1, x2, y2) {
+            const A = px - x1;
+            const B = py - y1;
+            const C = x2 - x1;
+            const D = y2 - y1;
+            const dot = A * C + B * D;
+            const lenSq = C * C + D * D;
+            let param = -1;
+            if (lenSq !== 0) param = dot / lenSq;
+
+            let xx, yy;
+            if (param < 0) {
+                xx = x1;
+                yy = y1;
+            } else if (param > 1) {
+                xx = x2;
+                yy = y2;
+            } else {
+                xx = x1 + param * C;
+                yy = y1 + param * D;
+            }
+
+            const dx = px - xx;
+            const dy = py - yy;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function clearAll() {
+            shapes = [];
+            redraw();
+        }
+
+        function undoLast() {
+            shapes.pop();
+            redraw();
+        }
+
+        function removeShape(index) {
+            shapes.splice(index, 1);
+            redraw();
+        }
+
+        function updateOutput() {
+            // Update shapes list
+            const listEl = document.getElementById('linesList');
+            listEl.innerHTML = shapes.map((s, i) => {
+                if (s.type === 'number') {
+                    return `<div class="line-item">
+                        <span class="coords" style="color: #FF00FF;">VENT #${s.number}: (${s.x1}, ${s.y1})</span>
+                        <button onclick="removeShape(${i})">X</button>
+                    </div>`;
+                }
+                return `<div class="line-item">
+                    <span class="coords ${s.color}">${s.color.toUpperCase()} ${s.type}: (${s.x1}, ${s.y1}) to (${s.x2}, ${s.y2})</span>
+                    <button onclick="removeShape(${i})">X</button>
+                </div>`;
+            }).join('');
+
+            // Generate code
+            if (shapes.length === 0) {
+                document.getElementById('output').textContent = '// No shapes drawn yet';
+                return;
+            }
+
+            // Separate yellow, white, and number shapes
+            const yellowShapes = shapes.filter(s => s.color === 'yellow');
+            const whiteShapes = shapes.filter(s => s.color === 'white');
+            const numberShapes = shapes.filter(s => s.type === 'number');
+
+            let code = '// Task area debug shapes\n';
+            code += '// Scale factor: 0.25 (map is scaled down)\n';
+            code += 'const s = 0.25;\n\n';
+
+            // Generate vent connections data if numbers exist
+            if (numberShapes.length > 0) {
+                code += '// Vent connections - same number = connected vents\n';
+                code += 'const ventConnections = [\n';
+                for (const shape of numberShapes) {
+                    code += `    { id: ${shape.number}, x: ${shape.x1}, y: ${shape.y1} },\n`;
+                }
+                code += '];\n\n';
+            }
+
+            code += 'function renderTaskAreas(ctx, camera) {\n';
+
+            // Yellow shapes (tasks)
+            if (yellowShapes.length > 0) {
+                code += '    // Yellow - Task areas\n';
+                code += '    ctx.strokeStyle = "#FFFF00";\n';
+                code += '    ctx.lineWidth = 2;\n\n';
+
+                for (const shape of yellowShapes) {
+                    code += generateShapeCode(shape);
+                }
+            }
+
+            // White shapes (non-tasks)
+            if (whiteShapes.length > 0) {
+                code += '    // White - Other areas (vents)\n';
+                code += '    ctx.strokeStyle = "#FFFFFF";\n';
+                code += '    ctx.lineWidth = 2;\n\n';
+
+                for (const shape of whiteShapes) {
+                    code += generateShapeCode(shape);
+                }
+            }
+
+            // Number markers for vent connections
+            if (numberShapes.length > 0) {
+                code += '    // Vent connection markers\n';
+                code += '    ctx.fillStyle = "#FF00FF";\n';
+                code += '    ctx.font = "bold 16px Arial";\n';
+                code += '    ctx.textAlign = "center";\n';
+                code += '    ctx.textBaseline = "middle";\n\n';
+
+                for (const shape of numberShapes) {
+                    code += `    // Vent group ${shape.number}\n`;
+                    code += `    ctx.beginPath();\n`;
+                    code += `    ctx.arc(${shape.x1} * s - camera.x, ${shape.y1} * s - camera.y, 15, 0, Math.PI * 2);\n`;
+                    code += `    ctx.fill();\n`;
+                    code += `    ctx.fillStyle = "#FFFFFF";\n`;
+                    code += `    ctx.fillText("${shape.number}", ${shape.x1} * s - camera.x, ${shape.y1} * s - camera.y);\n`;
+                    code += `    ctx.fillStyle = "#FF00FF";\n\n`;
+                }
+            }
+
+            code += '}\n';
+
+            document.getElementById('output').textContent = code;
+        }
+
+        function generateShapeCode(shape) {
+            let code = '';
+            if (shape.type === 'line') {
+                code += `    // Line\n`;
+                code += `    ctx.beginPath();\n`;
+                code += `    ctx.moveTo(${shape.x1} * s - camera.x, ${shape.y1} * s - camera.y);\n`;
+                code += `    ctx.lineTo(${shape.x2} * s - camera.x, ${shape.y2} * s - camera.y);\n`;
+                code += `    ctx.stroke();\n\n`;
+            } else if (shape.type === 'rect') {
+                const w = shape.x2 - shape.x1;
+                const h = shape.y2 - shape.y1;
+                code += `    // Rectangle at (${shape.x1}, ${shape.y1}) size ${w}x${h}\n`;
+                code += `    ctx.strokeRect(${shape.x1} * s - camera.x, ${shape.y1} * s - camera.y, ${w} * s, ${h} * s);\n\n`;
+            } else if (shape.type === 'circle') {
+                const radius = Math.round(Math.sqrt(Math.pow(shape.x2 - shape.x1, 2) + Math.pow(shape.y2 - shape.y1, 2)));
+                code += `    // Circle at (${shape.x1}, ${shape.y1}) radius ${radius}\n`;
+                code += `    ctx.beginPath();\n`;
+                code += `    ctx.arc(${shape.x1} * s - camera.x, ${shape.y1} * s - camera.y, ${radius} * s, 0, Math.PI * 2);\n`;
+                code += `    ctx.stroke();\n\n`;
+            }
+            return code;
+        }
+
+        function copyToClipboard() {
+            const text = document.getElementById('output').textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Copied to clipboard!');
+            });
+        }
+    </script>
+</body>
+</html>

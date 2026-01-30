@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Task Labeler - Map Task Names to Coordinates</title>
+    <style>
+        body {
+            background: #1a1a2e;
+            color: white;
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #container {
+            position: relative;
+            display: inline-block;
+            max-width: 100%;
+            max-height: 70vh;
+            overflow: auto;
+        }
+        #mapCanvas {
+            border: 2px solid #444;
+            cursor: crosshair;
+        }
+        #labelCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+        #info {
+            margin-top: 20px;
+            padding: 15px;
+            background: #2a2a4a;
+            border-radius: 8px;
+            max-width: 1000px;
+        }
+        #controls {
+            margin-bottom: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+        button {
+            padding: 8px 16px;
+            background: #4ecdc4;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover { background: #45b7aa; }
+        button.active { background: #ff6b6b; }
+        h1 { color: #ff6b6b; }
+        h3 { color: #4ecdc4; margin-top: 0; }
+        #taskInput {
+            padding: 10px;
+            font-size: 16px;
+            width: 300px;
+            border: 2px solid #4ecdc4;
+            border-radius: 5px;
+            background: #1a1a2e;
+            color: white;
+        }
+        #taskInput:focus {
+            outline: none;
+            border-color: #ff6b6b;
+        }
+        #mousePos {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.8);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+        }
+        #output {
+            background: #1a1a2e;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            white-space: pre;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        #labelsList {
+            margin-top: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .label-item {
+            padding: 8px;
+            margin: 4px 0;
+            background: #3a3a5a;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .label-item button {
+            padding: 4px 10px;
+            background: #ff4444;
+            margin-left: 10px;
+        }
+        .label-name {
+            color: #FFFF00;
+            font-weight: bold;
+        }
+        .label-coords {
+            color: #88ff88;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .instructions {
+            background: #3a3a5a;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        .instructions ol {
+            margin: 10px 0 0 20px;
+        }
+        .instructions li {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Task Labeler Tool</h1>
+
+    <div class="instructions">
+        <strong>How to use:</strong>
+        <ol>
+            <li>Type a task name in the input box (e.g., "Swipe Card", "Fix Wiring - Admin")</li>
+            <li>Click on the map where that task is located</li>
+            <li>The label will be placed at that position</li>
+            <li>When done, copy the generated code to use in Game.js</li>
+        </ol>
+    </div>
+
+    <div id="mousePos">Mouse: <span id="posX">0</span>, <span id="posY">0</span></div>
+
+    <div id="controls">
+        <input type="text" id="taskInput" placeholder="Enter task name (e.g., Swipe Card)" />
+        <strong>Zoom:</strong>
+        <button onclick="setZoom(0.25)">0.25x</button>
+        <button onclick="setZoom(0.5)" class="active">0.5x</button>
+        <button onclick="setZoom(1)">1x</button>
+        <button onclick="setZoom(2)">2x</button>
+        <button onclick="clearAll()">Clear All</button>
+        <button onclick="undoLast()">Undo Last</button>
+    </div>
+
+    <div id="container">
+        <canvas id="mapCanvas"></canvas>
+        <canvas id="labelCanvas"></canvas>
+    </div>
+
+    <div id="info">
+        <h3>Placed Task Labels (<span id="labelCount">0</span>)</h3>
+        <div id="labelsList"></div>
+
+        <h3 style="margin-top: 20px;">Generated Code for Game.js</h3>
+        <p>Copy this task area mapping to use in renderTaskAreas:</p>
+        <pre id="output">// No labels placed yet</pre>
+        <button onclick="copyToClipboard()">Copy to Clipboard</button>
+    </div>
+
+    <script>
+        const mapCanvas = document.getElementById('mapCanvas');
+        const mapCtx = mapCanvas.getContext('2d');
+        const labelCanvas = document.getElementById('labelCanvas');
+        const labelCtx = labelCanvas.getContext('2d');
+        const taskInput = document.getElementById('taskInput');
+
+        let img = new Image();
+        let zoom = 0.5;
+
+        // Task labels: { name, x, y } in full map coordinates
+        let taskLabels = [];
+
+        // Pre-load existing task areas from task-debug.html for reference
+        const existingAreas = [
+            { name: '', x1: 1850, y1: 661, x2: 1923, y2: 707 },
+            { name: '', x1: 2153, y1: 2054, x2: 2221, y2: 2102 },
+            { name: '', x1: 1712, y1: 2889, x2: 1784, y2: 2941 },
+            { name: '', x1: 1348, y1: 1788, x2: 1424, y2: 1843 },
+            { name: '', x1: 1492, y1: 3473, x2: 1590, y2: 3570 },
+            { name: '', x1: 4607, y1: 2797, x2: 4676, y2: 2844 },
+            { name: '', x1: 5202, y1: 2382, x2: 5272, y2: 2429 },
+            { name: '', x1: 5403, y1: 2347, x2: 5476, y2: 2408 },
+            { name: '', x1: 6121, y1: 2373, x2: 6178, y2: 2433 },
+            { name: '', x1: 6170, y1: 1734, x2: 6223, y2: 1792 },
+            { name: '', x1: 6461, y1: 1671, x2: 6536, y2: 1726 },
+            { name: '', x1: 7569, y1: 1908, x2: 7640, y2: 1959 },
+            { name: '', x1: 7834, y1: 1666, x2: 7913, y2: 1721 },
+            { name: '', x1: 8018, y1: 1665, x2: 8087, y2: 1721 },
+            { name: '', x1: 6514, y1: 511, x2: 6585, y2: 574 },
+            { name: '', x1: 6884, y1: 3050, x2: 6964, y2: 3108 },
+            { name: '', x1: 6064, y1: 3764, x2: 6140, y2: 3816 },
+            { name: '', x1: 5650, y1: 3738, x2: 5726, y2: 3792 },
+            { name: '', x1: 3560, y1: 2610, x2: 3632, y2: 2658 },
+            { name: '', x1: 3324, y1: 2538, x2: 3408, y2: 2590 },
+            { name: '', x1: 3190, y1: 2534, x2: 3280, y2: 2596 },
+            { name: '', x1: 3890, y1: 2548, x2: 3982, y2: 2656 },
+        ];
+
+        img.onload = function() {
+            resizeCanvases();
+            redraw();
+        };
+        img.src = '/assets/skeld-full.webp';
+
+        function resizeCanvases() {
+            mapCanvas.width = img.width * zoom;
+            mapCanvas.height = img.height * zoom;
+            labelCanvas.width = mapCanvas.width;
+            labelCanvas.height = mapCanvas.height;
+            mapCtx.imageSmoothingEnabled = false;
+            mapCtx.drawImage(img, 0, 0, mapCanvas.width, mapCanvas.height);
+        }
+
+        function setZoom(z) {
+            zoom = z;
+            document.querySelectorAll('#controls button').forEach(b => {
+                if (b.textContent.includes('x')) b.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            resizeCanvases();
+            redraw();
+        }
+
+        function redraw() {
+            // Redraw map
+            mapCtx.drawImage(img, 0, 0, mapCanvas.width, mapCanvas.height);
+
+            // Clear label canvas
+            labelCtx.clearRect(0, 0, labelCanvas.width, labelCanvas.height);
+
+            // Draw existing task area outlines (yellow, unfilled)
+            labelCtx.strokeStyle = '#FFFF00';
+            labelCtx.lineWidth = 2;
+            for (const area of existingAreas) {
+                const x = area.x1 * zoom;
+                const y = area.y1 * zoom;
+                const w = (area.x2 - area.x1) * zoom;
+                const h = (area.y2 - area.y1) * zoom;
+                labelCtx.strokeRect(x, y, w, h);
+            }
+
+            // Draw task labels
+            labelCtx.font = `bold ${Math.max(12, 14 * zoom)}px Arial`;
+            labelCtx.textAlign = 'left';
+            labelCtx.textBaseline = 'middle';
+
+            for (const label of taskLabels) {
+                const x = label.x * zoom;
+                const y = label.y * zoom;
+
+                // Draw marker dot
+                labelCtx.fillStyle = '#FF00FF';
+                labelCtx.beginPath();
+                labelCtx.arc(x, y, 8 * zoom, 0, Math.PI * 2);
+                labelCtx.fill();
+
+                // Draw label background
+                const textWidth = labelCtx.measureText(label.name).width;
+                labelCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                labelCtx.fillRect(x + 10 * zoom, y - 10 * zoom, textWidth + 10, 20 * zoom);
+
+                // Draw label text
+                labelCtx.fillStyle = '#FFFF00';
+                labelCtx.fillText(label.name, x + 15 * zoom, y);
+            }
+
+            updateOutput();
+        }
+
+        mapCanvas.addEventListener('mousemove', (e) => {
+            const rect = mapCanvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / zoom);
+            const y = Math.floor((e.clientY - rect.top) / zoom);
+
+            document.getElementById('posX').textContent = x;
+            document.getElementById('posY').textContent = y;
+        });
+
+        mapCanvas.addEventListener('click', (e) => {
+            const taskName = taskInput.value.trim();
+            if (!taskName) {
+                alert('Please enter a task name first!');
+                taskInput.focus();
+                return;
+            }
+
+            const rect = mapCanvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / zoom);
+            const y = Math.floor((e.clientY - rect.top) / zoom);
+
+            taskLabels.push({
+                name: taskName,
+                x: x,
+                y: y
+            });
+
+            // Clear input for next task
+            taskInput.value = '';
+            taskInput.focus();
+
+            redraw();
+        });
+
+        function clearAll() {
+            if (confirm('Clear all task labels?')) {
+                taskLabels = [];
+                redraw();
+            }
+        }
+
+        function undoLast() {
+            taskLabels.pop();
+            redraw();
+        }
+
+        function removeLabel(index) {
+            taskLabels.splice(index, 1);
+            redraw();
+        }
+
+        function updateOutput() {
+            // Update labels list
+            const listEl = document.getElementById('labelsList');
+            document.getElementById('labelCount').textContent = taskLabels.length;
+
+            listEl.innerHTML = taskLabels.map((label, i) => `
+                <div class="label-item">
+                    <div>
+                        <span class="label-name">${label.name}</span>
+                        <span class="label-coords">(${label.x}, ${label.y})</span>
+                    </div>
+                    <button onclick="removeLabel(${i})">X</button>
+                </div>
+            `).join('');
+
+            // Generate code
+            if (taskLabels.length === 0) {
+                document.getElementById('output').textContent = '// No labels placed yet\n// Click on the map after entering a task name';
+                return;
+            }
+
+            let code = '// Task area definitions - maps task names to their draw functions\n';
+            code += '// Generated by task-labeler.html\n\n';
+            code += 'const TASK_AREAS = {\n';
+
+            for (const label of taskLabels) {
+                // Create a sanitized key from the task name
+                const key = label.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+                code += `    // ${label.name} at (${label.x}, ${label.y})\n`;
+                code += `    '${label.name}': { x: ${label.x}, y: ${label.y} },\n\n`;
+            }
+
+            code += '};\n\n';
+            code += '// Use in renderTaskAreas like:\n';
+            code += '// for (const task of this.tasks) {\n';
+            code += '//     if (task.completed) continue;\n';
+            code += '//     const area = TASK_AREAS[task.name];\n';
+            code += '//     if (area) drawTaskMarker(area.x, area.y);\n';
+            code += '// }\n';
+
+            document.getElementById('output').textContent = code;
+        }
+
+        function copyToClipboard() {
+            const text = document.getElementById('output').textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Copied to clipboard!');
+            });
+        }
+
+        // Focus input on load
+        taskInput.focus();
+    </script>
+</body>
+</html>

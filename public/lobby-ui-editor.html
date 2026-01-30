@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Lobby UI Sprite Editor</title>
+    <style>
+        body {
+            background: #1a1a2e;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 10px;
+        }
+        #main-container {
+            display: flex;
+            gap: 20px;
+        }
+        #source-panel {
+            flex: 0 0 auto;
+            background: rgba(0,0,0,0.5);
+            padding: 15px;
+            border-radius: 8px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        #lobby-panel {
+            flex: 1;
+            background: rgba(0,0,0,0.5);
+            padding: 15px;
+            border-radius: 8px;
+            position: relative;
+        }
+        canvas {
+            display: block;
+            cursor: crosshair;
+        }
+        #lobby-canvas {
+            cursor: default;
+        }
+        h3 {
+            margin-top: 0;
+            color: #0ff;
+        }
+        .controls {
+            margin-bottom: 15px;
+        }
+        button {
+            padding: 8px 12px;
+            margin: 3px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            background: #444;
+            color: #fff;
+        }
+        button:hover {
+            background: #666;
+        }
+        button.active {
+            background: #0088ff;
+        }
+        .danger { background: #ff4444; }
+        .success { background: #00aa00; }
+        #sprite-list {
+            max-height: 200px;
+            overflow-y: auto;
+            background: rgba(0,0,0,0.3);
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .sprite-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 5px;
+            margin: 3px 0;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .sprite-item:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        .sprite-item.selected {
+            background: rgba(0,136,255,0.4);
+            outline: 2px solid #0088ff;
+        }
+        .sprite-item canvas {
+            background: #333;
+            cursor: pointer;
+        }
+        .sprite-item input {
+            flex: 1;
+            padding: 4px;
+            background: #333;
+            border: 1px solid #555;
+            color: #fff;
+            border-radius: 3px;
+        }
+        #selection-box {
+            position: absolute;
+            border: 2px dashed #0f0;
+            background: rgba(0, 255, 0, 0.1);
+            pointer-events: none;
+            display: none;
+            top: 0;
+            left: 0;
+            box-sizing: border-box;
+        }
+        #coords {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.8);
+            padding: 10px;
+            border-radius: 8px;
+            font-family: monospace;
+        }
+        #output {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.9);
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 400px;
+            max-height: 250px;
+            overflow: auto;
+            font-family: monospace;
+            font-size: 11px;
+            white-space: pre;
+        }
+        .placed-sprite {
+            position: absolute;
+            cursor: move;
+            outline: 2px solid transparent;
+        }
+        .placed-sprite:hover {
+            outline: 2px solid #0ff;
+        }
+        .placed-sprite.selected {
+            outline: 2px solid #0f0;
+        }
+        #instructions {
+            background: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 12px;
+        }
+        #instructions li {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="instructions">
+        <strong>Instructions:</strong>
+        <ol>
+            <li><strong>Cut sprites:</strong> Click and drag on the source image to select a region, then click "Cut Selection"</li>
+            <li><strong>Place sprites:</strong> Drag a sprite from the list onto the lobby, OR select one and click on the lobby</li>
+            <li><strong>Move sprites:</strong> Drag placed sprites to reposition them</li>
+            <li><strong>Delete:</strong> Select a placed sprite and press Delete, or use the "Remove Selected" button</li>
+            <li><strong>Export:</strong> Click "Export JSON" to get coordinates for use in code</li>
+        </ol>
+    </div>
+
+    <div id="main-container">
+        <div id="source-panel">
+            <h3 id="source-title">Source: GUI Buttons</h3>
+            <div class="controls">
+                <strong>Sprite Sheet:</strong>
+                <button id="btn-buttons" class="active" onclick="switchSpriteSheet('buttons')">Buttons</button>
+                <button id="btn-mainmenu" onclick="switchSpriteSheet('mainmenu')">Main Menu</button>
+            </div>
+            <div class="controls">
+                <strong>Zoom:</strong>
+                <button onclick="setSourceZoom(1)">1x</button>
+                <button onclick="setSourceZoom(2)">2x</button>
+                <button onclick="setSourceZoom(3)">3x</button>
+                <button onclick="setSourceZoom(4)">4x</button>
+            </div>
+            <div id="source-container" style="position: relative; display: inline-block; max-width: 100%; overflow: auto;">
+                <canvas id="source-canvas"></canvas>
+                <div id="selection-box"></div>
+            </div>
+            <div class="controls" style="margin-top:10px;">
+                <button class="success" onclick="cutSelection()">Cut Selection</button>
+                <button onclick="clearSelection()">Clear Selection</button>
+            </div>
+
+            <h3 style="margin-top:20px;">Cut Sprites</h3>
+            <div id="sprite-list">
+                <em>No sprites cut yet. Select a region above and click "Cut Selection"</em>
+            </div>
+            <div class="controls" style="margin-top:10px;">
+                <button class="danger" onclick="deleteSelectedSprite()">Delete Selected Sprite</button>
+            </div>
+        </div>
+
+        <div id="lobby-panel">
+            <h3>Lobby Preview</h3>
+            <div class="controls">
+                <strong>Lobby Zoom:</strong>
+                <button onclick="setLobbyZoom(0.5)">0.5x</button>
+                <button onclick="setLobbyZoom(0.75)">0.75x</button>
+                <button onclick="setLobbyZoom(1)">1x</button>
+                <span style="margin-left:20px;">
+                    <button class="danger" onclick="removeSelectedPlaced()">Remove Selected</button>
+                    <button class="danger" onclick="clearAllPlaced()">Clear All Placed</button>
+                </span>
+            </div>
+            <div id="lobby-container" style="position:relative; display:inline-block;">
+                <canvas id="lobby-canvas"></canvas>
+            </div>
+            <div class="controls" style="margin-top:10px;">
+                <button class="success" onclick="exportJSON()">Export JSON</button>
+                <button onclick="copyToClipboard()">Copy to Clipboard</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="coords">X: 0, Y: 0</div>
+    <div id="output">// Export will appear here</div>
+
+    <script>
+        // Source canvas (GUI buttons)
+        const sourceCanvas = document.getElementById('source-canvas');
+        const sourceCtx = sourceCanvas.getContext('2d');
+        let sourceImg = new Image();
+        let sourceZoom = 2;
+
+        // Lobby canvas
+        const lobbyCanvas = document.getElementById('lobby-canvas');
+        const lobbyCtx = lobbyCanvas.getContext('2d');
+        let lobbyImg = new Image();
+        let lobbyZoom = 0.75;
+
+        // Selection state
+        let isSelecting = false;
+        let selStart = { x: 0, y: 0 };
+        let selEnd = { x: 0, y: 0 };
+        const selectionBox = document.getElementById('selection-box');
+
+        // Cut sprites
+        let cutSprites = [];
+        let selectedSpriteIndex = -1;
+
+        // Placed sprites on lobby
+        let placedSprites = [];
+        let selectedPlacedIndex = -1;
+        let isDragging = false;
+        let dragOffset = { x: 0, y: 0 };
+
+        // Sprite sheet sources
+        const spriteSources = {
+            buttons: '/assets/gui/Buttons-sharedassets0.assets-73.png',
+            mainmenu: '/assets/gui/MainMenu-sharedassets0.assets-189.png'
+        };
+        let currentSpriteSheet = 'buttons';
+
+        // Load source image
+        sourceImg.onload = function() {
+            drawSource();
+        };
+        sourceImg.src = spriteSources.buttons;
+
+        function switchSpriteSheet(sheet) {
+            currentSpriteSheet = sheet;
+
+            // Clear selection when switching
+            clearSelection();
+
+            // Update button states
+            document.getElementById('btn-buttons').classList.remove('active');
+            document.getElementById('btn-mainmenu').classList.remove('active');
+            document.getElementById('btn-' + sheet).classList.add('active');
+
+            // Update title
+            const titles = {
+                buttons: 'Source: GUI Buttons',
+                mainmenu: 'Source: Main Menu'
+            };
+            document.getElementById('source-title').textContent = titles[sheet];
+
+            // Set appropriate zoom for each sheet (mainmenu is larger)
+            if (sheet === 'mainmenu') {
+                sourceZoom = 1;
+            } else {
+                sourceZoom = 2;
+            }
+
+            // Load new image - drawSource will be called by onload
+            sourceImg.src = spriteSources[sheet];
+        }
+
+        // Load lobby image
+        lobbyImg.onload = function() {
+            drawLobby();
+        };
+        lobbyImg.src = '/assets/lobby/lobby-frame-1.png';
+
+        function setSourceZoom(z) {
+            sourceZoom = z;
+            drawSource();
+        }
+
+        function setLobbyZoom(z) {
+            lobbyZoom = z;
+            drawLobby();
+        }
+
+        function drawSource() {
+            if (!sourceImg.complete) return;
+            sourceCanvas.width = sourceImg.width * sourceZoom;
+            sourceCanvas.height = sourceImg.height * sourceZoom;
+            sourceCtx.imageSmoothingEnabled = false;
+            sourceCtx.drawImage(sourceImg, 0, 0, sourceCanvas.width, sourceCanvas.height);
+        }
+
+        function drawLobby() {
+            if (!lobbyImg.complete) return;
+            lobbyCanvas.width = lobbyImg.width * lobbyZoom;
+            lobbyCanvas.height = lobbyImg.height * lobbyZoom;
+            lobbyCtx.imageSmoothingEnabled = false;
+            lobbyCtx.drawImage(lobbyImg, 0, 0, lobbyCanvas.width, lobbyCanvas.height);
+
+            // Draw placed sprites
+            placedSprites.forEach((placed, index) => {
+                const sprite = cutSprites[placed.spriteIndex];
+                if (sprite) {
+                    const x = placed.x * lobbyZoom;
+                    const y = placed.y * lobbyZoom;
+                    const w = sprite.width * lobbyZoom;
+                    const h = sprite.height * lobbyZoom;
+
+                    lobbyCtx.drawImage(sprite.canvas, x, y, w, h);
+
+                    if (index === selectedPlacedIndex) {
+                        lobbyCtx.strokeStyle = '#0f0';
+                        lobbyCtx.lineWidth = 2;
+                        lobbyCtx.strokeRect(x, y, w, h);
+                    }
+                }
+            });
+        }
+
+        // Source canvas mouse events (selection)
+        sourceCanvas.addEventListener('mousedown', (e) => {
+            const rect = sourceCanvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / sourceZoom);
+            const y = Math.floor((e.clientY - rect.top) / sourceZoom);
+
+            // Clamp to image bounds
+            selStart.x = Math.max(0, Math.min(x, sourceImg.width));
+            selStart.y = Math.max(0, Math.min(y, sourceImg.height));
+            selEnd.x = selStart.x;
+            selEnd.y = selStart.y;
+            isSelecting = true;
+            updateSelectionBox();
+        });
+
+        sourceCanvas.addEventListener('mousemove', (e) => {
+            const rect = sourceCanvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / sourceZoom);
+            const y = Math.floor((e.clientY - rect.top) / sourceZoom);
+
+            // Clamp to image bounds for display
+            const clampedX = Math.max(0, Math.min(x, sourceImg.width));
+            const clampedY = Math.max(0, Math.min(y, sourceImg.height));
+
+            document.getElementById('coords').textContent = `Source: ${clampedX}, ${clampedY}`;
+
+            if (isSelecting) {
+                selEnd.x = clampedX;
+                selEnd.y = clampedY;
+                updateSelectionBox();
+            }
+        });
+
+        sourceCanvas.addEventListener('mouseup', () => {
+            isSelecting = false;
+        });
+
+        sourceCanvas.addEventListener('mouseleave', () => {
+            if (isSelecting) {
+                // Keep selection active but stop extending
+            }
+        });
+
+        function updateSelectionBox() {
+            const x1 = Math.min(selStart.x, selEnd.x);
+            const y1 = Math.min(selStart.y, selEnd.y);
+            const x2 = Math.max(selStart.x, selEnd.x);
+            const y2 = Math.max(selStart.y, selEnd.y);
+
+            selectionBox.style.display = 'block';
+            selectionBox.style.left = (x1 * sourceZoom) + 'px';
+            selectionBox.style.top = (y1 * sourceZoom) + 'px';
+            selectionBox.style.width = ((x2 - x1) * sourceZoom) + 'px';
+            selectionBox.style.height = ((y2 - y1) * sourceZoom) + 'px';
+        }
+
+        function clearSelection() {
+            selectionBox.style.display = 'none';
+            selStart = { x: 0, y: 0 };
+            selEnd = { x: 0, y: 0 };
+        }
+
+        function cutSelection() {
+            const x1 = Math.min(selStart.x, selEnd.x);
+            const y1 = Math.min(selStart.y, selEnd.y);
+            const w = Math.abs(selEnd.x - selStart.x);
+            const h = Math.abs(selEnd.y - selStart.y);
+
+            if (w < 5 || h < 5) {
+                alert('Selection too small. Please select a larger area.');
+                return;
+            }
+
+            // Create canvas with cut sprite
+            const spriteCanvas = document.createElement('canvas');
+            spriteCanvas.width = w;
+            spriteCanvas.height = h;
+            const spriteCtx = spriteCanvas.getContext('2d');
+            spriteCtx.drawImage(sourceImg, x1, y1, w, h, 0, 0, w, h);
+
+            cutSprites.push({
+                name: `sprite_${cutSprites.length + 1}`,
+                source: currentSpriteSheet,
+                x: x1,
+                y: y1,
+                width: w,
+                height: h,
+                canvas: spriteCanvas
+            });
+
+            updateSpriteList();
+            clearSelection();
+        }
+
+        function updateSpriteList() {
+            const list = document.getElementById('sprite-list');
+            if (cutSprites.length === 0) {
+                list.innerHTML = '<em>No sprites cut yet. Select a region above and click "Cut Selection"</em>';
+                return;
+            }
+
+            list.innerHTML = '';
+            cutSprites.forEach((sprite, index) => {
+                const item = document.createElement('div');
+                item.className = 'sprite-item' + (index === selectedSpriteIndex ? ' selected' : '');
+                item.onclick = () => selectSprite(index);
+
+                // Make draggable
+                item.draggable = true;
+                item.ondragstart = (e) => {
+                    e.dataTransfer.setData('spriteIndex', index.toString());
+                    e.dataTransfer.effectAllowed = 'copy';
+                    selectSprite(index);
+                };
+
+                // Preview canvas
+                const preview = document.createElement('canvas');
+                preview.width = Math.min(50, sprite.width);
+                preview.height = Math.min(50, sprite.height);
+                const pCtx = preview.getContext('2d');
+                pCtx.imageSmoothingEnabled = false;
+                const scale = Math.min(50 / sprite.width, 50 / sprite.height);
+                pCtx.drawImage(sprite.canvas, 0, 0, sprite.width * scale, sprite.height * scale);
+
+                // Name input
+                const nameInput = document.createElement('input');
+                nameInput.value = sprite.name;
+                nameInput.onclick = (e) => e.stopPropagation();
+                nameInput.onchange = (e) => { sprite.name = e.target.value; };
+                nameInput.draggable = false; // Don't drag from input
+
+                // Size and source info
+                const infoSpan = document.createElement('span');
+                const sheetLabel = sprite.source === 'mainmenu' ? 'MM' : 'Btn';
+                infoSpan.textContent = `${sprite.width}x${sprite.height} [${sheetLabel}]`;
+                infoSpan.style.color = '#888';
+                infoSpan.style.fontSize = '11px';
+                infoSpan.style.whiteSpace = 'nowrap';
+
+                item.appendChild(preview);
+                item.appendChild(nameInput);
+                item.appendChild(infoSpan);
+                list.appendChild(item);
+            });
+        }
+
+        function selectSprite(index) {
+            selectedSpriteIndex = index;
+            updateSpriteList();
+        }
+
+        function deleteSelectedSprite() {
+            if (selectedSpriteIndex >= 0 && selectedSpriteIndex < cutSprites.length) {
+                // Also remove any placed instances of this sprite
+                placedSprites = placedSprites.filter(p => p.spriteIndex !== selectedSpriteIndex);
+                // Update sprite indices for remaining placed sprites
+                placedSprites.forEach(p => {
+                    if (p.spriteIndex > selectedSpriteIndex) p.spriteIndex--;
+                });
+
+                cutSprites.splice(selectedSpriteIndex, 1);
+                selectedSpriteIndex = -1;
+                updateSpriteList();
+                drawLobby();
+            }
+        }
+
+        // Drag and drop onto lobby
+        lobbyCanvas.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+        });
+
+        lobbyCanvas.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const spriteIndexStr = e.dataTransfer.getData('spriteIndex');
+            if (spriteIndexStr !== '') {
+                const spriteIndex = parseInt(spriteIndexStr);
+                const sprite = cutSprites[spriteIndex];
+                if (sprite) {
+                    const rect = lobbyCanvas.getBoundingClientRect();
+                    const x = (e.clientX - rect.left) / lobbyZoom;
+                    const y = (e.clientY - rect.top) / lobbyZoom;
+
+                    placedSprites.push({
+                        spriteIndex: spriteIndex,
+                        name: sprite.name,
+                        x: Math.round(x - sprite.width / 2),
+                        y: Math.round(y - sprite.height / 2)
+                    });
+                    selectedPlacedIndex = placedSprites.length - 1;
+                    drawLobby();
+                }
+            }
+        });
+
+        // Lobby canvas mouse events (placing and moving)
+        lobbyCanvas.addEventListener('mousedown', (e) => {
+            const rect = lobbyCanvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / lobbyZoom;
+            const y = (e.clientY - rect.top) / lobbyZoom;
+
+            // Check if clicking on existing placed sprite
+            for (let i = placedSprites.length - 1; i >= 0; i--) {
+                const placed = placedSprites[i];
+                const sprite = cutSprites[placed.spriteIndex];
+                if (sprite && x >= placed.x && x <= placed.x + sprite.width &&
+                    y >= placed.y && y <= placed.y + sprite.height) {
+                    selectedPlacedIndex = i;
+                    isDragging = true;
+                    dragOffset.x = x - placed.x;
+                    dragOffset.y = y - placed.y;
+                    drawLobby();
+                    return;
+                }
+            }
+
+            // If a sprite is selected in the list, place it
+            if (selectedSpriteIndex >= 0) {
+                const sprite = cutSprites[selectedSpriteIndex];
+                placedSprites.push({
+                    spriteIndex: selectedSpriteIndex,
+                    name: sprite.name,
+                    x: Math.round(x - sprite.width / 2),
+                    y: Math.round(y - sprite.height / 2)
+                });
+                selectedPlacedIndex = placedSprites.length - 1;
+                drawLobby();
+            } else {
+                selectedPlacedIndex = -1;
+                drawLobby();
+            }
+        });
+
+        lobbyCanvas.addEventListener('mousemove', (e) => {
+            const rect = lobbyCanvas.getBoundingClientRect();
+            const x = Math.round((e.clientX - rect.left) / lobbyZoom);
+            const y = Math.round((e.clientY - rect.top) / lobbyZoom);
+
+            document.getElementById('coords').textContent = `Lobby: ${x}, ${y}`;
+
+            if (isDragging && selectedPlacedIndex >= 0) {
+                placedSprites[selectedPlacedIndex].x = Math.round(x - dragOffset.x);
+                placedSprites[selectedPlacedIndex].y = Math.round(y - dragOffset.y);
+                drawLobby();
+            }
+        });
+
+        lobbyCanvas.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        lobbyCanvas.addEventListener('mouseleave', () => {
+            isDragging = false;
+        });
+
+        // Keyboard events
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Delete' && selectedPlacedIndex >= 0) {
+                placedSprites.splice(selectedPlacedIndex, 1);
+                selectedPlacedIndex = -1;
+                drawLobby();
+            }
+
+            // Arrow keys to nudge
+            if (selectedPlacedIndex >= 0) {
+                const nudge = e.shiftKey ? 10 : 1;
+                if (e.key === 'ArrowUp') { placedSprites[selectedPlacedIndex].y -= nudge; drawLobby(); e.preventDefault(); }
+                if (e.key === 'ArrowDown') { placedSprites[selectedPlacedIndex].y += nudge; drawLobby(); e.preventDefault(); }
+                if (e.key === 'ArrowLeft') { placedSprites[selectedPlacedIndex].x -= nudge; drawLobby(); e.preventDefault(); }
+                if (e.key === 'ArrowRight') { placedSprites[selectedPlacedIndex].x += nudge; drawLobby(); e.preventDefault(); }
+            }
+        });
+
+        function removeSelectedPlaced() {
+            if (selectedPlacedIndex >= 0) {
+                placedSprites.splice(selectedPlacedIndex, 1);
+                selectedPlacedIndex = -1;
+                drawLobby();
+            }
+        }
+
+        function clearAllPlaced() {
+            if (confirm('Remove all placed sprites?')) {
+                placedSprites = [];
+                selectedPlacedIndex = -1;
+                drawLobby();
+            }
+        }
+
+        function exportJSON() {
+            const data = {
+                lobbySize: {
+                    width: lobbyImg.width,
+                    height: lobbyImg.height
+                },
+                sprites: cutSprites.map(s => ({
+                    name: s.name,
+                    spriteSheet: s.source,
+                    sourceX: s.x,
+                    sourceY: s.y,
+                    width: s.width,
+                    height: s.height
+                })),
+                placements: placedSprites.map(p => ({
+                    sprite: cutSprites[p.spriteIndex]?.name || 'unknown',
+                    x: p.x,
+                    y: p.y
+                }))
+            };
+
+            document.getElementById('output').textContent = JSON.stringify(data, null, 2);
+        }
+
+        function copyToClipboard() {
+            exportJSON();
+            const text = document.getElementById('output').textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Copied to clipboard!');
+            });
+        }
+
+        // Initialize
+        drawSource();
+        updateSpriteList();
+    </script>
+</body>
+</html>

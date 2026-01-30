@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Wires Panel Debugger</title>
+    <style>
+        body {
+            background: #1a1a2e;
+            color: white;
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #container {
+            position: relative;
+            display: inline-block;
+        }
+        canvas {
+            border: 2px solid #444;
+        }
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+        #controls {
+            margin-bottom: 15px;
+            padding: 15px;
+            background: #2a2a4a;
+            border-radius: 8px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #4ecdc4;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover { background: #45b7aa; }
+        h1 { color: #ff6b6b; }
+        #coords {
+            margin-top: 15px;
+            padding: 15px;
+            background: #2a2a4a;
+            border-radius: 8px;
+            font-family: monospace;
+        }
+        .slot-info {
+            margin: 5px 0;
+            padding: 5px;
+            background: #1a1a2e;
+            border-radius: 3px;
+        }
+        #instructions {
+            margin-top: 15px;
+            padding: 15px;
+            background: #2a2a4a;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Wires Panel Slot Debugger</h1>
+
+    <div id="controls">
+        <strong>Scale:</strong>
+        <button onclick="setScale(1)">1x</button>
+        <button onclick="setScale(1.2)" class="active" id="scale12">1.2x (game scale)</button>
+        <button onclick="setScale(2)">2x</button>
+    </div>
+
+    <div id="container">
+        <canvas id="panel"></canvas>
+        <canvas id="overlay"></canvas>
+    </div>
+
+    <div id="coords">
+        <h3>Current Slot Positions (in texture pixels, before scaling):</h3>
+        <div id="slotList"></div>
+        <h3>Generated Code:</h3>
+        <pre id="codeOutput"></pre>
+    </div>
+
+    <div id="instructions">
+        <h3>Instructions</h3>
+        <p>Click on the panel to add/adjust slot positions. The 8 slots (4 left, 4 right) need to cover the COLORED rectangles (not the white boxes above them).</p>
+        <p>Click near a slot to set its position. Left side = slots L0-L3, Right side = slots R0-R3</p>
+        <p><strong>Keyboard:</strong> Arrow keys = move, W/S = height, A/D = width, 0-3 = select slot, L/R = select side</p>
+    </div>
+
+    <script>
+        const panelCanvas = document.getElementById('panel');
+        const panelCtx = panelCanvas.getContext('2d');
+        const overlayCanvas = document.getElementById('overlay');
+        const overlayCtx = overlayCanvas.getContext('2d');
+
+        let scale = 1.2;
+        let img = new Image();
+
+        // Slot positions in TEXTURE coordinates (before scaling)
+        // These are what we need to figure out
+        // Looking at the reference image, the colored boxes are smaller rectangles
+        let slots = {
+            left: [
+                { x: 37, y: 60, w: 22, h: 42 },
+                { x: 37, y: 170, w: 22, h: 42 },
+                { x: 37, y: 280, w: 22, h: 42 },
+                { x: 37, y: 390, w: 22, h: 42 }
+            ],
+            right: [
+                { x: 449, y: 60, w: 22, h: 42 },
+                { x: 449, y: 170, w: 22, h: 42 },
+                { x: 449, y: 280, w: 22, h: 42 },
+                { x: 449, y: 390, w: 22, h: 42 }
+            ]
+        };
+
+        img.onload = function() {
+            resize();
+            draw();
+        };
+        img.src = '/assets/wires-panel.png';
+
+        function setScale(s) {
+            scale = s;
+            document.querySelectorAll('#controls button').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+            resize();
+            draw();
+        }
+
+        function resize() {
+            const w = 508 * scale;
+            const h = 500 * scale;
+            panelCanvas.width = w;
+            panelCanvas.height = h;
+            overlayCanvas.width = w;
+            overlayCanvas.height = h;
+            overlayCanvas.style.left = '0px';
+            overlayCanvas.style.top = '0px';
+        }
+
+        function draw() {
+            // Draw panel
+            panelCtx.imageSmoothingEnabled = false;
+            panelCtx.drawImage(img, 0, 0, 508, 500, 0, 0, panelCanvas.width, panelCanvas.height);
+
+            // Draw slot overlays
+            overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+            // Left slots - green
+            overlayCtx.strokeStyle = '#00FF00';
+            overlayCtx.lineWidth = 2;
+            slots.left.forEach((slot, i) => {
+                const x = slot.x * scale;
+                const y = slot.y * scale;
+                const w = slot.w * scale;
+                const h = slot.h * scale;
+                overlayCtx.strokeRect(x, y, w, h);
+                overlayCtx.fillStyle = 'rgba(0, 255, 0, 0.3)';
+                overlayCtx.fillRect(x, y, w, h);
+                overlayCtx.fillStyle = '#00FF00';
+                overlayCtx.font = '14px Arial';
+                overlayCtx.fillText(`L${i}`, x + 5, y + 15);
+            });
+
+            // Right slots - blue
+            overlayCtx.strokeStyle = '#00AAFF';
+            slots.right.forEach((slot, i) => {
+                const x = slot.x * scale;
+                const y = slot.y * scale;
+                const w = slot.w * scale;
+                const h = slot.h * scale;
+                overlayCtx.strokeRect(x, y, w, h);
+                overlayCtx.fillStyle = 'rgba(0, 170, 255, 0.3)';
+                overlayCtx.fillRect(x, y, w, h);
+                overlayCtx.fillStyle = '#00AAFF';
+                overlayCtx.font = '14px Arial';
+                overlayCtx.fillText(`R${i}`, x + 5, y + 15);
+            });
+
+            updateCoords();
+        }
+
+        function updateCoords() {
+            let html = '<strong>Left Slots:</strong><br>';
+            slots.left.forEach((slot, i) => {
+                html += `<div class="slot-info">L${i}: x=${slot.x}, y=${slot.y}, w=${slot.w}, h=${slot.h}</div>`;
+            });
+            html += '<br><strong>Right Slots:</strong><br>';
+            slots.right.forEach((slot, i) => {
+                html += `<div class="slot-info">R${i}: x=${slot.x}, y=${slot.y}, w=${slot.w}, h=${slot.h}</div>`;
+            });
+            document.getElementById('slotList').innerHTML = html;
+
+            // Generate code
+            const leftX = slots.left[0].x;
+            const rightX = slots.right[0].x;
+            const slotW = slots.left[0].w;
+            const slotH = slots.left[0].h;
+            const yPositions = slots.left.map(s => s.y);
+
+            let code = `// Slot positions in texture coordinates\n`;
+            code += `const leftSlotX = panelX + ${leftX} * this.scale;\n`;
+            code += `const rightSlotX = panelX + ${rightX} * this.scale;\n`;
+            code += `const slotW = ${slotW} * this.scale;\n`;
+            code += `const slotH = ${slotH} * this.scale;\n\n`;
+            code += `const slotYPositions = [\n`;
+            yPositions.forEach((y, i) => {
+                code += `    panelY + ${y} * this.scale${i < 3 ? ',' : ''}\n`;
+            });
+            code += `];`;
+
+            document.getElementById('codeOutput').textContent = code;
+        }
+
+        // Click to adjust slot position
+        overlayCanvas.style.pointerEvents = 'auto';
+        overlayCanvas.addEventListener('click', (e) => {
+            const rect = overlayCanvas.getBoundingClientRect();
+            const clickX = (e.clientX - rect.left) / scale;
+            const clickY = (e.clientY - rect.top) / scale;
+
+            // Determine if left or right side
+            const isRight = clickX > 254;
+            const targetSlots = isRight ? slots.right : slots.left;
+
+            // Find closest slot by Y
+            let closestIdx = 0;
+            let closestDist = Infinity;
+            targetSlots.forEach((slot, i) => {
+                const dist = Math.abs(clickY - (slot.y + slot.h/2));
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    closestIdx = i;
+                }
+            });
+
+            // Update slot position (center on click)
+            targetSlots[closestIdx].x = Math.round(clickX - targetSlots[closestIdx].w / 2);
+            targetSlots[closestIdx].y = Math.round(clickY - targetSlots[closestIdx].h / 2);
+
+            draw();
+        });
+
+        // Arrow keys to adjust selected slot size
+        let selectedSide = 'left';
+        let selectedIdx = 0;
+
+        document.addEventListener('keydown', (e) => {
+            const slot = (selectedSide === 'left' ? slots.left : slots.right)[selectedIdx];
+
+            if (e.key === 'ArrowUp') slot.y--;
+            if (e.key === 'ArrowDown') slot.y++;
+            if (e.key === 'ArrowLeft') slot.x--;
+            if (e.key === 'ArrowRight') slot.x++;
+            if (e.key === 'w') slot.h--;
+            if (e.key === 's') slot.h++;
+            if (e.key === 'a') slot.w--;
+            if (e.key === 'd') slot.w++;
+            if (e.key >= '0' && e.key <= '3') selectedIdx = parseInt(e.key);
+            if (e.key === 'l') selectedSide = 'left';
+            if (e.key === 'r') selectedSide = 'right';
+
+            draw();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Task Bar Debugger</title>
+    <style>
+        body {
+            background: #1a1a2e;
+            color: white;
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #container {
+            position: relative;
+            display: inline-block;
+        }
+        canvas {
+            border: 2px solid #444;
+        }
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            cursor: crosshair;
+        }
+        #controls {
+            margin-bottom: 15px;
+            padding: 15px;
+            background: #2a2a4a;
+            border-radius: 8px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #4ecdc4;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover { background: #45b7aa; }
+        button.active { background: #ff6b6b; }
+        h1 { color: #ff6b6b; }
+        h3 { color: #4ecdc4; margin-top: 0; }
+        #coords {
+            margin-top: 15px;
+            padding: 15px;
+            background: #2a2a4a;
+            border-radius: 8px;
+            font-family: monospace;
+        }
+        #preview {
+            margin-top: 15px;
+            padding: 15px;
+            background: #2a2a4a;
+            border-radius: 8px;
+        }
+        #previewCanvas {
+            border: 2px solid #444;
+            background: #333;
+        }
+        .value {
+            color: #00ff00;
+            font-weight: bold;
+        }
+        #instructions {
+            margin-top: 15px;
+            padding: 15px;
+            background: #2a2a4a;
+            border-radius: 8px;
+        }
+        input[type="range"] {
+            width: 200px;
+            vertical-align: middle;
+        }
+        .slider-group {
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Task Bar Green Fill Debugger</h1>
+
+    <div id="controls">
+        <strong>Zoom:</strong>
+        <button onclick="setZoom(1)">1x</button>
+        <button onclick="setZoom(2)">2x</button>
+        <button onclick="setZoom(3)" class="active" id="zoom3">3x</button>
+        <button onclick="setZoom(4)">4x</button>
+        <span style="margin-left: 20px;">Current zoom: <span id="zoomLevel">3x</span></span>
+    </div>
+
+    <div id="container">
+        <canvas id="taskbar"></canvas>
+        <canvas id="overlay"></canvas>
+    </div>
+
+    <div id="coords">
+        <h3>Green Fill Area (click and drag to select)</h3>
+        <p>Start X: <span id="startX" class="value">-</span></p>
+        <p>Start Y: <span id="startY" class="value">-</span></p>
+        <p>End X: <span id="endX" class="value">-</span></p>
+        <p>End Y: <span id="endY" class="value">-</span></p>
+        <p>Width: <span id="width" class="value">-</span></p>
+        <p>Height: <span id="height" class="value">-</span></p>
+
+        <h3>Generated Code:</h3>
+        <pre id="codeOutput" style="background: #1a1a2e; padding: 10px; border-radius: 5px;">Select the green area to generate code</pre>
+    </div>
+
+    <div id="preview">
+        <h3>Preview with Progress Fill</h3>
+        <div class="slider-group">
+            <label>Progress: <span id="progressValue">50</span>%</label>
+            <input type="range" id="progressSlider" min="0" max="100" value="50" oninput="updateProgress()">
+        </div>
+        <canvas id="previewCanvas"></canvas>
+    </div>
+
+    <div id="instructions">
+        <h3>Instructions</h3>
+        <p>1. Click and drag on the taskbar image to select the green fill area</p>
+        <p>2. Use the progress slider to preview how the fill will look</p>
+        <p>3. Copy the generated code to Game.js</p>
+        <p><strong>Keyboard:</strong> Arrow keys to nudge selection, Shift+Arrow for fine adjust</p>
+    </div>
+
+    <script>
+        const taskbarCanvas = document.getElementById('taskbar');
+        const taskbarCtx = taskbarCanvas.getContext('2d');
+        const overlayCanvas = document.getElementById('overlay');
+        const overlayCtx = overlayCanvas.getContext('2d');
+        const previewCanvas = document.getElementById('previewCanvas');
+        const previewCtx = previewCanvas.getContext('2d');
+
+        let zoom = 3;
+        let img = new Image();
+        let isSelecting = false;
+        let selStartX, selStartY, selEndX, selEndY;
+
+        // Current fill area coordinates (in sprite pixels)
+        let fillArea = { x: 64, y: 22, w: 671, h: 25 };
+
+        // Sprite source coordinates
+        const srcX = 2;
+        const srcY = 177;
+        const srcW = 799;
+        const srcH = 69;
+
+        img.onload = function() {
+            resize();
+            draw();
+            updatePreview();
+        };
+        img.src = '/assets/taskbar.png';
+
+        function setZoom(z) {
+            zoom = z;
+            document.getElementById('zoomLevel').textContent = z + 'x';
+            document.querySelectorAll('#controls button').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+            resize();
+            draw();
+        }
+
+        function resize() {
+            const w = srcW * zoom;
+            const h = srcH * zoom;
+            taskbarCanvas.width = w;
+            taskbarCanvas.height = h;
+            overlayCanvas.width = w;
+            overlayCanvas.height = h;
+        }
+
+        function draw() {
+            // Draw taskbar sprite
+            taskbarCtx.imageSmoothingEnabled = false;
+            taskbarCtx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, taskbarCanvas.width, taskbarCanvas.height);
+
+            // Draw fill area overlay
+            overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+            overlayCtx.strokeStyle = '#00FF00';
+            overlayCtx.lineWidth = 2;
+            overlayCtx.strokeRect(
+                fillArea.x * zoom,
+                fillArea.y * zoom,
+                fillArea.w * zoom,
+                fillArea.h * zoom
+            );
+            overlayCtx.fillStyle = 'rgba(0, 255, 0, 0.2)';
+            overlayCtx.fillRect(
+                fillArea.x * zoom,
+                fillArea.y * zoom,
+                fillArea.w * zoom,
+                fillArea.h * zoom
+            );
+
+            updateCoords();
+        }
+
+        function updateCoords() {
+            document.getElementById('startX').textContent = fillArea.x;
+            document.getElementById('startY').textContent = fillArea.y;
+            document.getElementById('endX').textContent = fillArea.x + fillArea.w;
+            document.getElementById('endY').textContent = fillArea.y + fillArea.h;
+            document.getElementById('width').textContent = fillArea.w;
+            document.getElementById('height').textContent = fillArea.h;
+
+            const code = `// Green fill area inside the task bar
+const fillStartX = ${fillArea.x};  // Where green fill starts in sprite
+const fillEndX = ${fillArea.x + fillArea.w};   // Where green fill ends in sprite
+const fillY = ${fillArea.y};       // Top of fill area in sprite
+const fillH = ${fillArea.h};       // Height of fill area in sprite`;
+
+            document.getElementById('codeOutput').textContent = code;
+        }
+
+        function updateProgress() {
+            const progress = document.getElementById('progressSlider').value / 100;
+            document.getElementById('progressValue').textContent = Math.round(progress * 100);
+
+            // Create preview
+            const scale = 2;
+            previewCanvas.width = srcW * scale;
+            previewCanvas.height = srcH * scale;
+
+            // Draw base taskbar
+            previewCtx.imageSmoothingEnabled = false;
+
+            // First draw at 1:1 to manipulate pixels
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = srcW;
+            tempCanvas.height = srcH;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, srcW, srcH);
+
+            // Get image data to edit pixels
+            const imageData = tempCtx.getImageData(0, 0, srcW, srcH);
+            const data = imageData.data;
+
+            // Calculate how far the fill should extend
+            const fillWidth = Math.round(fillArea.w * progress);
+
+            // Brighten green pixels in the fill area based on progress
+            for (let y = fillArea.y; y < fillArea.y + fillArea.h; y++) {
+                for (let x = fillArea.x; x < fillArea.x + fillWidth; x++) {
+                    const idx = (y * srcW + x) * 4;
+                    const r = data[idx];
+                    const g = data[idx + 1];
+                    const b = data[idx + 2];
+                    const a = data[idx + 3];
+
+                    // Only brighten pixels that are green-ish (g > r and g > b)
+                    if (a > 0 && g > r && g > b) {
+                        data[idx] = Math.min(255, r + 40);
+                        data[idx + 1] = Math.min(255, g + 80);
+                        data[idx + 2] = Math.min(255, b + 40);
+                    }
+                }
+            }
+
+            tempCtx.putImageData(imageData, 0, 0);
+
+            // Draw scaled preview
+            previewCtx.drawImage(tempCanvas, 0, 0, srcW, srcH, 0, 0, previewCanvas.width, previewCanvas.height);
+
+            // Draw outline of fill area for reference
+            previewCtx.strokeStyle = 'rgba(255, 255, 0, 0.5)';
+            previewCtx.lineWidth = 1;
+            previewCtx.strokeRect(
+                fillArea.x * scale,
+                fillArea.y * scale,
+                fillArea.w * scale,
+                fillArea.h * scale
+            );
+        }
+
+        // Mouse events for selecting fill area
+        overlayCanvas.addEventListener('mousedown', (e) => {
+            isSelecting = true;
+            const rect = overlayCanvas.getBoundingClientRect();
+            selStartX = Math.floor((e.clientX - rect.left) / zoom);
+            selStartY = Math.floor((e.clientY - rect.top) / zoom);
+        });
+
+        overlayCanvas.addEventListener('mousemove', (e) => {
+            if (!isSelecting) return;
+
+            const rect = overlayCanvas.getBoundingClientRect();
+            selEndX = Math.floor((e.clientX - rect.left) / zoom);
+            selEndY = Math.floor((e.clientY - rect.top) / zoom);
+
+            fillArea.x = Math.min(selStartX, selEndX);
+            fillArea.y = Math.min(selStartY, selEndY);
+            fillArea.w = Math.abs(selEndX - selStartX);
+            fillArea.h = Math.abs(selEndY - selStartY);
+
+            draw();
+        });
+
+        overlayCanvas.addEventListener('mouseup', () => {
+            isSelecting = false;
+            updatePreview();
+        });
+
+        // Keyboard nudge
+        document.addEventListener('keydown', (e) => {
+            const step = e.shiftKey ? 1 : 5;
+
+            if (e.key === 'ArrowLeft') fillArea.x -= step;
+            if (e.key === 'ArrowRight') fillArea.x += step;
+            if (e.key === 'ArrowUp') fillArea.y -= step;
+            if (e.key === 'ArrowDown') fillArea.y += step;
+            if (e.key === 'w') fillArea.h -= step;
+            if (e.key === 's') fillArea.h += step;
+            if (e.key === 'a') fillArea.w -= step;
+            if (e.key === 'd') fillArea.w += step;
+
+            draw();
+            updatePreview();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Engine Align Task - Sprite Assembler</title>
+    <style>
+        body {
+            background: #1a1a2e;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 15px;
+        }
+        #main-container {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .panel {
+            background: rgba(0,0,0,0.5);
+            padding: 15px;
+            border-radius: 8px;
+        }
+        #sprites-panel {
+            flex: 0 0 350px;
+            max-height: 90vh;
+            overflow: auto;
+        }
+        #preview-panel {
+            flex: 1;
+            min-width: 500px;
+        }
+        canvas {
+            display: block;
+            background: #333;
+        }
+        h3 {
+            margin-top: 0;
+            color: #0ff;
+        }
+        .controls {
+            margin-bottom: 15px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+        button {
+            padding: 8px 14px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            background: #444;
+            color: #fff;
+        }
+        button:hover { background: #666; }
+        button.active { background: #0088ff; }
+        .danger { background: #ff4444 !important; }
+        .success { background: #00aa00 !important; }
+        .warning { background: #ff8800 !important; }
+        input[type="number"], input[type="text"] {
+            width: 70px;
+            padding: 6px;
+            background: #333;
+            border: 1px solid #555;
+            color: #fff;
+            border-radius: 4px;
+        }
+        input[type="range"] {
+            width: 150px;
+        }
+        label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 13px;
+        }
+        .sprite-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            margin: 8px 0;
+            background: rgba(255,255,255,0.1);
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .sprite-item:hover { background: rgba(255,255,255,0.2); }
+        .sprite-item.selected {
+            background: rgba(0,136,255,0.4);
+            outline: 2px solid #0088ff;
+        }
+        .sprite-item canvas {
+            border: 1px solid #555;
+            background: #222;
+        }
+        .sprite-item .info {
+            flex: 1;
+        }
+        .sprite-item .info small {
+            color: #888;
+            display: block;
+        }
+        #preview-canvas {
+            border: 2px solid #444;
+            cursor: crosshair;
+        }
+        #output {
+            background: #1a1a2e;
+            padding: 15px;
+            border-radius: 5px;
+            max-height: 300px;
+            overflow: auto;
+            font-family: monospace;
+            font-size: 11px;
+            white-space: pre;
+            margin-top: 15px;
+        }
+        .section-title {
+            color: #ff0;
+            font-size: 14px;
+            margin: 15px 0 8px 0;
+            border-bottom: 1px solid #555;
+            padding-bottom: 5px;
+        }
+        .dotted-line-controls {
+            background: rgba(0,100,100,0.3);
+            padding: 10px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        .dotted-line-controls label {
+            margin: 5px 0;
+        }
+        #coords {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.8);
+            padding: 10px;
+            border-radius: 8px;
+            font-family: monospace;
+            z-index: 100;
+        }
+        .placed-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 10px;
+            margin: 4px 0;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h2 style="color: #0ff; margin-top: 0;">Engine Align Task - Sprite Assembler</h2>
+
+    <div id="main-container">
+        <div id="sprites-panel" class="panel">
+            <h3>Loaded Sprites</h3>
+
+            <div class="controls">
+                <input type="file" id="fileInput" accept="image/*" multiple style="display: none;">
+                <button onclick="document.getElementById('fileInput').click()">Load Images</button>
+                <span id="loadStatus" style="color: #888; font-size: 12px;"></span>
+            </div>
+
+            <div id="sprite-list">
+                <em>Auto-loading sprites...</em>
+            </div>
+
+            <div class="section-title">Dotted Line Settings</div>
+            <div class="dotted-line-controls">
+                <label>
+                    Dot Count: <input type="number" id="dotCount" value="10" min="1" max="50" style="width: 60px;">
+                </label>
+                <label>
+                    Dot Spacing: <input type="number" id="dotSpacing" value="15" min="1" max="100" style="width: 60px;"> px
+                </label>
+                <label>
+                    Line Angle: <input type="range" id="lineAngle" value="0" min="0" max="360" style="width: 120px;">
+                    <span id="angleValue">0</span>°
+                </label>
+                <div style="margin-top: 10px;">
+                    <button class="success" onclick="placeDottedLine()">Place Dotted Line</button>
+                </div>
+            </div>
+
+            <div class="section-title">Placed Elements</div>
+            <div id="placed-list">No elements placed</div>
+
+            <div class="controls" style="margin-top: 15px;">
+                <button class="danger" onclick="clearAllPlaced()">Clear All</button>
+                <button class="success" onclick="exportConfig()">Export JS</button>
+            </div>
+        </div>
+
+        <div id="preview-panel" class="panel">
+            <h3>Task Preview</h3>
+            <div class="controls">
+                <label>Zoom:
+                    <button onclick="setZoom(0.5)">0.5x</button>
+                    <button onclick="setZoom(1)" class="active" id="zoom1">1x</button>
+                    <button onclick="setZoom(1.5)">1.5x</button>
+                    <button onclick="setZoom(2)">2x</button>
+                </label>
+                <label>BG:
+                    <button onclick="setBg('#1a1a2e')">Dark</button>
+                    <button onclick="setBg('#4a6fa5')" class="active">Blue</button>
+                    <button onclick="setBg('#333')">Gray</button>
+                </label>
+            </div>
+
+            <canvas id="preview-canvas"></canvas>
+
+            <div id="output">// Export will appear here</div>
+        </div>
+    </div>
+
+    <div id="coords">X: 0, Y: 0</div>
+
+    <script>
+        // Preview canvas
+        const previewCanvas = document.getElementById('preview-canvas');
+        const previewCtx = previewCanvas.getContext('2d');
+
+        // State
+        let zoom = 1;
+        let bgColor = '#4a6fa5';
+        const PREVIEW_WIDTH = 600;
+        const PREVIEW_HEIGHT = 500;
+
+        // Loaded sprites
+        let sprites = [];
+        let selectedSpriteIndex = -1;
+
+        // Placed elements
+        let placedElements = [];
+        let selectedPlacedIndex = -1;
+
+        // Dragging
+        let isDragging = false;
+        let dragOffset = { x: 0, y: 0 };
+
+        // Predefined sprite names for engine align
+        const spriteNames = {
+            'base': 'engineAlign_base',
+            'engine': 'engineAlign_engine',
+            'slider': 'engineAlign_slider',
+            'dottedLine': 'engineAlign_dottedLine'
+        };
+
+        // File input handler
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            const files = Array.from(e.target.files);
+            let loaded = 0;
+
+            files.forEach(file => {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        // Determine sprite type from filename
+                        let name = file.name.replace(/\.[^/.]+$/, ''); // Remove extension
+                        let type = 'custom';
+
+                        if (name.includes('base')) type = 'base';
+                        else if (name.includes('engine')) type = 'engine';
+                        else if (name.includes('slider')) type = 'slider';
+                        else if (name.includes('dotted') || name.includes('Line')) type = 'dot';
+
+                        sprites.push({
+                            name: name,
+                            type: type,
+                            img: img,
+                            width: img.width,
+                            height: img.height
+                        });
+
+                        loaded++;
+                        if (loaded === files.length) {
+                            updateSpriteList();
+                            document.getElementById('loadStatus').textContent = `${sprites.length} sprites loaded`;
+                        }
+                    };
+                    img.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        });
+
+        // Angle slider
+        document.getElementById('lineAngle').addEventListener('input', (e) => {
+            document.getElementById('angleValue').textContent = e.target.value;
+        });
+
+        function updateSpriteList() {
+            const list = document.getElementById('sprite-list');
+
+            if (sprites.length === 0) {
+                list.innerHTML = '<em>Click "Load Images" to add sprites</em>';
+                return;
+            }
+
+            list.innerHTML = '';
+            sprites.forEach((sprite, index) => {
+                const item = document.createElement('div');
+                item.className = 'sprite-item' + (index === selectedSpriteIndex ? ' selected' : '');
+                item.onclick = () => selectSprite(index);
+
+                // Preview canvas
+                const preview = document.createElement('canvas');
+                const maxSize = 60;
+                const scale = Math.min(maxSize / sprite.width, maxSize / sprite.height, 1);
+                preview.width = Math.max(30, sprite.width * scale);
+                preview.height = Math.max(30, sprite.height * scale);
+                const pCtx = preview.getContext('2d');
+                pCtx.drawImage(sprite.img, 0, 0, preview.width, preview.height);
+
+                const info = document.createElement('div');
+                info.className = 'info';
+                info.innerHTML = `<strong>${sprite.name}</strong><small>${sprite.width}x${sprite.height} (${sprite.type})</small>`;
+
+                // Don't show Place button for dottedLine sprite - use the Place Dotted Line button instead
+                const isDotSprite = sprite.type === 'dottedLine' || sprite.type === 'dot' || sprite.name.includes('dotted') || sprite.name.includes('Line');
+
+                item.appendChild(preview);
+                item.appendChild(info);
+
+                if (!isDotSprite) {
+                    const placeBtn = document.createElement('button');
+                    placeBtn.textContent = 'Place';
+                    placeBtn.style.padding = '4px 10px';
+                    placeBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        placeSprite(index);
+                    };
+                    item.appendChild(placeBtn);
+                } else {
+                    const hint = document.createElement('small');
+                    hint.textContent = 'Use settings below';
+                    hint.style.color = '#0ff';
+                    item.appendChild(hint);
+                }
+
+                list.appendChild(item);
+            });
+        }
+
+        function selectSprite(index) {
+            selectedSpriteIndex = index;
+            updateSpriteList();
+        }
+
+        function placeSprite(spriteIndex) {
+            const sprite = sprites[spriteIndex];
+            placedElements.push({
+                type: 'sprite',
+                spriteIndex: spriteIndex,
+                name: sprite.name,
+                x: PREVIEW_WIDTH / 2 - sprite.width / 2,
+                y: PREVIEW_HEIGHT / 2 - sprite.height / 2,
+                width: sprite.width,
+                height: sprite.height
+            });
+            updatePlacedList();
+            drawPreview();
+        }
+
+        function placeDottedLine() {
+            // Find the dot sprite
+            const dotIndex = sprites.findIndex(s => s.type === 'dottedLine' || s.type === 'dot' || s.name.includes('dotted') || s.name.includes('Line'));
+            if (dotIndex === -1) {
+                alert('Please load the dotted line sprite first');
+                return;
+            }
+
+            const dotCount = parseInt(document.getElementById('dotCount').value) || 10;
+            const dotSpacing = parseInt(document.getElementById('dotSpacing').value) || 15;
+            const angle = parseInt(document.getElementById('lineAngle').value) || 0;
+
+            placedElements.push({
+                type: 'dottedLine',
+                spriteIndex: dotIndex,
+                name: 'dottedLine',
+                x: PREVIEW_WIDTH / 2,
+                y: PREVIEW_HEIGHT / 2,
+                dotCount: dotCount,
+                dotSpacing: dotSpacing,
+                angle: angle
+            });
+            updatePlacedList();
+            drawPreview();
+        }
+
+        function updatePlacedList() {
+            const list = document.getElementById('placed-list');
+
+            if (placedElements.length === 0) {
+                list.innerHTML = 'No elements placed';
+                return;
+            }
+
+            list.innerHTML = placedElements.map((el, i) => {
+                let desc = '';
+                if (el.type === 'dottedLine') {
+                    desc = `Dotted Line (${el.dotCount} dots, ${el.dotSpacing}px, ${el.angle}°)`;
+                } else {
+                    desc = `${el.name}`;
+                }
+                return `<div class="placed-item" style="${selectedPlacedIndex === i ? 'background: rgba(0,136,255,0.4);' : ''}">
+                    <span onclick="selectPlaced(${i})" style="cursor:pointer; flex:1;">${desc}<br><small>(${Math.round(el.x)}, ${Math.round(el.y)})</small></span>
+                    <button onclick="removePlaced(${i})" style="padding: 2px 8px;">X</button>
+                </div>`;
+            }).join('');
+        }
+
+        function selectPlaced(index) {
+            selectedPlacedIndex = index;
+            updatePlacedList();
+            drawPreview();
+        }
+
+        function removePlaced(index) {
+            placedElements.splice(index, 1);
+            if (selectedPlacedIndex === index) selectedPlacedIndex = -1;
+            else if (selectedPlacedIndex > index) selectedPlacedIndex--;
+            updatePlacedList();
+            drawPreview();
+        }
+
+        function clearAllPlaced() {
+            if (confirm('Remove all placed elements?')) {
+                placedElements = [];
+                selectedPlacedIndex = -1;
+                updatePlacedList();
+                drawPreview();
+            }
+        }
+
+        function setZoom(z) {
+            zoom = z;
+            document.querySelectorAll('#preview-panel .controls button').forEach(b => {
+                if (b.textContent.match(/^[\d.]+x$/)) b.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            drawPreview();
+        }
+
+        function setBg(color) {
+            bgColor = color;
+            drawPreview();
+        }
+
+        function drawPreview() {
+            previewCanvas.width = PREVIEW_WIDTH * zoom;
+            previewCanvas.height = PREVIEW_HEIGHT * zoom;
+
+            // Background
+            previewCtx.fillStyle = bgColor;
+            previewCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
+
+            // Grid
+            previewCtx.strokeStyle = 'rgba(255,255,255,0.1)';
+            previewCtx.lineWidth = 1;
+            for (let x = 0; x < previewCanvas.width; x += 50 * zoom) {
+                previewCtx.beginPath();
+                previewCtx.moveTo(x, 0);
+                previewCtx.lineTo(x, previewCanvas.height);
+                previewCtx.stroke();
+            }
+            for (let y = 0; y < previewCanvas.height; y += 50 * zoom) {
+                previewCtx.beginPath();
+                previewCtx.moveTo(0, y);
+                previewCtx.lineTo(previewCanvas.width, y);
+                previewCtx.stroke();
+            }
+
+            // Draw placed elements
+            placedElements.forEach((el, index) => {
+                if (el.type === 'dottedLine') {
+                    drawDottedLine(el, index === selectedPlacedIndex);
+                } else {
+                    drawSprite(el, index === selectedPlacedIndex);
+                }
+            });
+        }
+
+        function drawSprite(el, selected) {
+            const sprite = sprites[el.spriteIndex];
+            if (!sprite) return;
+
+            const x = el.x * zoom;
+            const y = el.y * zoom;
+            const w = el.width * zoom;
+            const h = el.height * zoom;
+
+            previewCtx.drawImage(sprite.img, x, y, w, h);
+
+            if (selected) {
+                previewCtx.strokeStyle = '#0f0';
+                previewCtx.lineWidth = 2;
+                previewCtx.strokeRect(x, y, w, h);
+            }
+        }
+
+        function drawDottedLine(el, selected) {
+            const sprite = sprites[el.spriteIndex];
+            if (!sprite) return;
+
+            const angleRad = el.angle * Math.PI / 180;
+            const dotW = sprite.width;
+            const dotH = sprite.height;
+
+            // Calculate total line length
+            const totalLength = (el.dotCount - 1) * el.dotSpacing;
+            const startX = el.x - (totalLength / 2) * Math.cos(angleRad);
+            const startY = el.y - (totalLength / 2) * Math.sin(angleRad);
+
+            for (let i = 0; i < el.dotCount; i++) {
+                const dotX = (startX + i * el.dotSpacing * Math.cos(angleRad)) * zoom;
+                const dotY = (startY + i * el.dotSpacing * Math.sin(angleRad)) * zoom;
+
+                previewCtx.save();
+                previewCtx.translate(dotX, dotY);
+                previewCtx.rotate(angleRad);
+                previewCtx.drawImage(sprite.img, -dotW * zoom / 2, -dotH * zoom / 2, dotW * zoom, dotH * zoom);
+                previewCtx.restore();
+            }
+
+            if (selected) {
+                // Draw bounding area
+                previewCtx.strokeStyle = '#0f0';
+                previewCtx.lineWidth = 2;
+                previewCtx.setLineDash([5, 5]);
+                previewCtx.beginPath();
+                previewCtx.arc(el.x * zoom, el.y * zoom, 20, 0, Math.PI * 2);
+                previewCtx.stroke();
+                previewCtx.setLineDash([]);
+            }
+        }
+
+        // Preview canvas mouse events
+        previewCanvas.addEventListener('mousedown', (e) => {
+            const rect = previewCanvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / zoom;
+            const y = (e.clientY - rect.top) / zoom;
+
+            // Check if clicking on existing element
+            for (let i = placedElements.length - 1; i >= 0; i--) {
+                const el = placedElements[i];
+                let hit = false;
+
+                if (el.type === 'dottedLine') {
+                    // Check distance from center
+                    const dx = x - el.x;
+                    const dy = y - el.y;
+                    hit = Math.sqrt(dx * dx + dy * dy) < 30;
+                } else {
+                    hit = x >= el.x && x <= el.x + el.width &&
+                          y >= el.y && y <= el.y + el.height;
+                }
+
+                if (hit) {
+                    selectedPlacedIndex = i;
+                    isDragging = true;
+                    dragOffset.x = x - el.x;
+                    dragOffset.y = y - el.y;
+                    updatePlacedList();
+                    drawPreview();
+                    return;
+                }
+            }
+
+            // If a sprite is selected in list, place it
+            if (selectedSpriteIndex >= 0) {
+                const sprite = sprites[selectedSpriteIndex];
+                placedElements.push({
+                    type: 'sprite',
+                    spriteIndex: selectedSpriteIndex,
+                    name: sprite.name,
+                    x: x - sprite.width / 2,
+                    y: y - sprite.height / 2,
+                    width: sprite.width,
+                    height: sprite.height
+                });
+                updatePlacedList();
+                drawPreview();
+            }
+        });
+
+        previewCanvas.addEventListener('mousemove', (e) => {
+            const rect = previewCanvas.getBoundingClientRect();
+            const x = Math.round((e.clientX - rect.left) / zoom);
+            const y = Math.round((e.clientY - rect.top) / zoom);
+
+            document.getElementById('coords').textContent = `X: ${x}, Y: ${y}`;
+
+            if (isDragging && selectedPlacedIndex >= 0) {
+                const el = placedElements[selectedPlacedIndex];
+                el.x = x - dragOffset.x;
+                el.y = y - dragOffset.y;
+                updatePlacedList();
+                drawPreview();
+            }
+        });
+
+        previewCanvas.addEventListener('mouseup', () => { isDragging = false; });
+        previewCanvas.addEventListener('mouseleave', () => { isDragging = false; });
+
+        // Keyboard
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT') return;
+
+            if (e.key === 'Delete' && selectedPlacedIndex >= 0) {
+                removePlaced(selectedPlacedIndex);
+            }
+
+            // Arrow keys to nudge
+            if (selectedPlacedIndex >= 0) {
+                const nudge = e.shiftKey ? 10 : 1;
+                const el = placedElements[selectedPlacedIndex];
+                if (e.key === 'ArrowUp') { el.y -= nudge; updatePlacedList(); drawPreview(); e.preventDefault(); }
+                if (e.key === 'ArrowDown') { el.y += nudge; updatePlacedList(); drawPreview(); e.preventDefault(); }
+                if (e.key === 'ArrowLeft') { el.x -= nudge; updatePlacedList(); drawPreview(); e.preventDefault(); }
+                if (e.key === 'ArrowRight') { el.x += nudge; updatePlacedList(); drawPreview(); e.preventDefault(); }
+            }
+        });
+
+        function exportConfig() {
+            let code = '// Engine Align Task Sprite Configuration\n';
+            code += 'const engineAlignSprites = {\n';
+            code += `    previewSize: { width: ${PREVIEW_WIDTH}, height: ${PREVIEW_HEIGHT} },\n`;
+            code += '    sprites: {\n';
+
+            // Export sprite definitions
+            sprites.forEach(s => {
+                code += `        '${s.name}': { width: ${s.width}, height: ${s.height}, type: '${s.type}' },\n`;
+            });
+            code += '    },\n';
+
+            code += '    elements: [\n';
+
+            // Export placed elements
+            placedElements.forEach(el => {
+                if (el.type === 'dottedLine') {
+                    code += `        { type: 'dottedLine', sprite: '${sprites[el.spriteIndex].name}', x: ${Math.round(el.x)}, y: ${Math.round(el.y)}, dotCount: ${el.dotCount}, dotSpacing: ${el.dotSpacing}, angle: ${el.angle} },\n`;
+                } else {
+                    code += `        { type: 'sprite', sprite: '${el.name}', x: ${Math.round(el.x)}, y: ${Math.round(el.y)} },\n`;
+                }
+            });
+
+            code += '    ]\n';
+            code += '};\n';
+
+            document.getElementById('output').textContent = code;
+        }
+
+        // Preload sprites automatically
+        const preloadSprites = [
+            { name: 'engineAlign_base', src: '/assets/tasks/engineAlign_base.png', type: 'base' },
+            { name: 'engineAlign_engine', src: '/assets/tasks/engineAlign_engine.png', type: 'engine' },
+            { name: 'engineAlign_slider', src: '/assets/tasks/engineAlign_slider.png', type: 'slider' },
+            { name: 'engineAlign_dottedLine', src: '/assets/tasks/engineAlign_dottedLine.png', type: 'dottedLine' }
+        ];
+
+        function autoLoadSprites() {
+            let loaded = 0;
+            const total = preloadSprites.length;
+            document.getElementById('loadStatus').textContent = `Loading ${total} sprites...`;
+
+            preloadSprites.forEach(spriteInfo => {
+                const img = new Image();
+                img.onload = () => {
+                    sprites.push({
+                        name: spriteInfo.name,
+                        type: spriteInfo.type,
+                        img: img,
+                        width: img.width,
+                        height: img.height
+                    });
+
+                    loaded++;
+                    document.getElementById('loadStatus').textContent = `Loaded ${loaded}/${total}...`;
+
+                    if (loaded === total) {
+                        document.getElementById('loadStatus').textContent = `${sprites.length} sprites loaded`;
+                        updateSpriteList();
+                        drawPreview();
+                    }
+                };
+                img.onerror = () => {
+                    console.error(`Failed to load: ${spriteInfo.src}`);
+                    loaded++;
+                    document.getElementById('loadStatus').textContent = `Loaded ${loaded}/${total} (some failed)`;
+
+                    if (loaded === total) {
+                        updateSpriteList();
+                        drawPreview();
+                    }
+                };
+                img.src = spriteInfo.src;
+            });
+        }
+
+        // Initialize
+        drawPreview();
+        autoLoadSprites();
+    </script>
+</body>
+</html>

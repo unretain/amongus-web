@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Map Debug</title>
+    <style>
+        body { background: #111; color: white; font-family: monospace; margin: 10px; }
+        .texture { margin: 20px 0; }
+        .texture img { max-width: 100%; border: 1px solid #0ff; }
+        h2 { color: #0ff; }
+        .info { color: #ff0; }
+    </style>
+</head>
+<body>
+    <h1>Map Texture Debug</h1>
+    <div id="textures"></div>
+
+    <script>
+        const textures = [
+            'Admin-Comms-Elec-Engine-Halls-Shields-Storage.png',
+            'Admin-Comms-Elec-Engine-Halls-Shields-Storage_0.png',
+            'Cafeteria.png',
+            'Cafeteria_0.png',
+            'cafeteriaWalls.png',
+            'BG_Skeld.png',
+            'BG_Skeld_0.png',
+            'HallwayMain.png',
+            'hallwayL.png',
+            'engine.png',
+            'Engine_0.png',
+            'Electrical.png'
+        ];
+
+        const container = document.getElementById('textures');
+
+        textures.forEach(name => {
+            const div = document.createElement('div');
+            div.className = 'texture';
+
+            const h2 = document.createElement('h2');
+            h2.textContent = name;
+            div.appendChild(h2);
+
+            const info = document.createElement('p');
+            info.className = 'info';
+            div.appendChild(info);
+
+            const img = document.createElement('img');
+            img.src = `/assets/${name}`;
+            img.onload = () => {
+                info.textContent = `Dimensions: ${img.naturalWidth}x${img.naturalHeight}`;
+            };
+            img.onerror = () => {
+                info.textContent = 'Failed to load';
+            };
+            div.appendChild(img);
+
+            container.appendChild(div);
+        });
+    </script>
+</body>
+</html>

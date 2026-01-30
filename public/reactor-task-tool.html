@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Reactor Task - Sprite Combiner & Map Marker</title>
+    <style>
+        body {
+            background: #1a1a2e;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 15px;
+        }
+        #main-container {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .panel {
+            background: rgba(0,0,0,0.5);
+            padding: 15px;
+            border-radius: 8px;
+        }
+        #sprites-panel {
+            flex: 0 0 500px;
+        }
+        #map-panel {
+            flex: 1;
+            min-width: 600px;
+        }
+        h3 {
+            margin-top: 0;
+            color: #0ff;
+        }
+        .controls {
+            margin-bottom: 15px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+        button {
+            padding: 8px 14px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            background: #444;
+            color: #fff;
+        }
+        button:hover { background: #666; }
+        button.active { background: #0088ff; }
+        .success { background: #00aa00; }
+        .sprite-container {
+            background: #333;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        .sprite-container img {
+            max-width: 200px;
+            image-rendering: pixelated;
+            display: block;
+            margin: 10px auto;
+        }
+        .sprite-info {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #aaa;
+            text-align: center;
+        }
+        #map-container {
+            position: relative;
+            overflow: auto;
+            max-height: 80vh;
+            border: 2px solid #444;
+        }
+        #map-img {
+            display: block;
+        }
+        #map-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            cursor: crosshair;
+        }
+        #coords {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.8);
+            padding: 8px 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        #markers-list {
+            max-height: 200px;
+            overflow-y: auto;
+            background: rgba(0,0,0,0.3);
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .marker-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px;
+            margin: 4px 0;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+        }
+        #output {
+            background: #000;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+        input[type="text"], input[type="number"] {
+            padding: 6px;
+            background: #333;
+            border: 1px solid #555;
+            color: #fff;
+            border-radius: 4px;
+        }
+        input[type="file"] {
+            background: #333;
+            padding: 5px;
+            border-radius: 4px;
+        }
+        .combined-preview {
+            background: #222;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+        #combined-canvas {
+            background: #111;
+            border: 1px solid #444;
+            display: block;
+            margin: 0 auto;
+        }
+        .sprite-row {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 15px;
+        }
+        .sprite-box {
+            flex: 1;
+            background: #222;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .sprite-box h4 {
+            margin: 0 0 10px 0;
+            color: #0ff;
+        }
+        .sprite-box img {
+            max-width: 100%;
+            max-height: 150px;
+            image-rendering: pixelated;
+        }
+    </style>
+</head>
+<body>
+    <h2 style="color: #0ff; margin-top: 0;">Reactor Meltdown Task - Sprite Combiner & Map Marker</h2>
+
+    <div id="main-container">
+        <div id="sprites-panel" class="panel">
+            <h3>Sprite Combiner</h3>
+
+            <div class="controls" style="background: rgba(0,100,0,0.3); padding: 10px; border-radius: 8px; margin-bottom: 15px;">
+                <strong>Load Sprites:</strong>
+                <input type="file" id="fileInput1" accept="image/*">
+                <input type="file" id="fileInput2" accept="image/*">
+            </div>
+
+            <div class="sprite-row">
+                <div class="sprite-box">
+                    <h4>Sprite 1 (Handprint Base)</h4>
+                    <img id="sprite1-img" src="/assets/tasks/reactorMeltdown_handprintBase.png">
+                    <div class="sprite-info" id="sprite1-info">Loading...</div>
+                </div>
+                <div class="sprite-box">
+                    <h4>Sprite 2 (Glow Bar)</h4>
+                    <img id="sprite2-img" src="/assets/tasks/reactorMeltdown_glowBar.png">
+                    <div class="sprite-info" id="sprite2-info">Loading...</div>
+                </div>
+            </div>
+
+            <div class="combined-preview">
+                <h4 style="color: #0ff; margin-top: 0;">Combined Preview</h4>
+                <canvas id="combined-canvas" width="500" height="500"></canvas>
+                <div class="controls" style="margin-top: 15px; justify-content: center;">
+                    <label>Sprite 2 X: <input type="number" id="sprite2X" value="0" style="width: 60px;"></label>
+                    <label>Y: <input type="number" id="sprite2Y" value="0" style="width: 60px;"></label>
+                    <label>Scale: <input type="number" id="combineScale" value="1" step="0.1" min="0.1" max="3" style="width: 60px;"></label>
+                    <button onclick="updateCombined()" class="success">Update</button>
+                </div>
+            </div>
+
+            <div id="output">// Sprite info will appear here</div>
+        </div>
+
+        <div id="map-panel" class="panel">
+            <h3>Map - Click to Mark Task Location</h3>
+
+            <div class="controls">
+                <label>Zoom:
+                    <button onclick="setMapZoom(0.15)">0.15x</button>
+                    <button onclick="setMapZoom(0.25)" class="active">0.25x</button>
+                    <button onclick="setMapZoom(0.5)">0.5x</button>
+                </label>
+                <label style="margin-left: 20px;">Marker Name: <input type="text" id="markerName" value="Reactor Task"></label>
+            </div>
+
+            <div id="map-container">
+                <img id="map-img" src="/assets/skeld-full.webp">
+                <canvas id="map-overlay"></canvas>
+            </div>
+
+            <h4 style="margin-top: 15px;">Marked Locations</h4>
+            <div id="markers-list">No markers yet - click on the map to add</div>
+        </div>
+    </div>
+
+    <div id="coords">X: <span id="posX">0</span>, Y: <span id="posY">0</span></div>
+
+    <script>
+        // Sprites
+        const sprite1Img = document.getElementById('sprite1-img');
+        const sprite2Img = document.getElementById('sprite2-img');
+        const combinedCanvas = document.getElementById('combined-canvas');
+        const combinedCtx = combinedCanvas.getContext('2d');
+
+        // Map
+        const mapImg = document.getElementById('map-img');
+        const mapOverlay = document.getElementById('map-overlay');
+        const mapCtx = mapOverlay.getContext('2d');
+        let mapZoom = 0.25;
+        let markers = [];
+
+        // File input handlers
+        document.getElementById('fileInput1').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => { sprite1Img.src = event.target.result; };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        document.getElementById('fileInput2').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => { sprite2Img.src = event.target.result; };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Load sprite info
+        sprite1Img.onload = function() {
+            document.getElementById('sprite1-info').textContent =
+                `Size: ${sprite1Img.naturalWidth}x${sprite1Img.naturalHeight}`;
+            updateCombined();
+            updateOutput();
+        };
+
+        sprite2Img.onload = function() {
+            document.getElementById('sprite2-info').textContent =
+                `Size: ${sprite2Img.naturalWidth}x${sprite2Img.naturalHeight}`;
+            updateCombined();
+            updateOutput();
+        };
+
+        sprite1Img.onerror = function() {
+            document.getElementById('sprite1-info').textContent = 'Failed to load - use file picker';
+        };
+
+        sprite2Img.onerror = function() {
+            document.getElementById('sprite2-info').textContent = 'Failed to load - use file picker';
+        };
+
+        function updateCombined() {
+            const scale = parseFloat(document.getElementById('combineScale').value) || 1;
+            combinedCtx.clearRect(0, 0, combinedCanvas.width, combinedCanvas.height);
+
+            // Draw sprite 1 (base) centered
+            if (sprite1Img.complete && sprite1Img.naturalWidth) {
+                const w1 = sprite1Img.naturalWidth * scale;
+                const h1 = sprite1Img.naturalHeight * scale;
+                const x1 = (combinedCanvas.width - w1) / 2;
+                const y1 = (combinedCanvas.height - h1) / 2;
+                combinedCtx.drawImage(sprite1Img, x1, y1, w1, h1);
+
+                // Draw sprite 2 with offset
+                if (sprite2Img.complete && sprite2Img.naturalWidth) {
+                    const offsetX = parseInt(document.getElementById('sprite2X').value) || 0;
+                    const offsetY = parseInt(document.getElementById('sprite2Y').value) || 0;
+                    const w2 = sprite2Img.naturalWidth * scale;
+                    const h2 = sprite2Img.naturalHeight * scale;
+                    combinedCtx.drawImage(sprite2Img, x1 + offsetX * scale, y1 + offsetY * scale, w2, h2);
+                }
+            }
+        }
+
+        function updateOutput() {
+            let output = '// Reactor Meltdown Task Sprites\n\n';
+
+            if (sprite1Img.complete && sprite1Img.naturalWidth) {
+                output += `sprite1: {\n`;
+                output += `    width: ${sprite1Img.naturalWidth},\n`;
+                output += `    height: ${sprite1Img.naturalHeight}\n`;
+                output += `},\n\n`;
+            }
+
+            if (sprite2Img.complete && sprite2Img.naturalWidth) {
+                const offsetX = parseInt(document.getElementById('sprite2X').value) || 0;
+                const offsetY = parseInt(document.getElementById('sprite2Y').value) || 0;
+                output += `sprite2: {\n`;
+                output += `    width: ${sprite2Img.naturalWidth},\n`;
+                output += `    height: ${sprite2Img.naturalHeight},\n`;
+                output += `    offsetX: ${offsetX},\n`;
+                output += `    offsetY: ${offsetY}\n`;
+                output += `},\n\n`;
+            }
+
+            if (markers.length > 0) {
+                output += '// Task Locations\n';
+                markers.forEach(m => {
+                    output += `${m.name.replace(/\s+/g, '')}: { x: ${m.x}, y: ${m.y} },\n`;
+                });
+            }
+
+            document.getElementById('output').textContent = output;
+        }
+
+        // Map setup
+        function setupMap() {
+            mapImg.style.width = (mapImg.naturalWidth * mapZoom) + 'px';
+            mapImg.style.height = (mapImg.naturalHeight * mapZoom) + 'px';
+            mapOverlay.width = mapImg.naturalWidth * mapZoom;
+            mapOverlay.height = mapImg.naturalHeight * mapZoom;
+            drawMarkers();
+        }
+
+        mapImg.onload = setupMap;
+        mapImg.onerror = function() {
+            console.error('Map failed to load from:', mapImg.src);
+        };
+        if (mapImg.complete && mapImg.naturalWidth) setupMap();
+
+        function setMapZoom(z) {
+            mapZoom = z;
+            document.querySelectorAll('#map-panel .controls button').forEach(b => {
+                if (b.textContent.match(/^[\d.]+x$/)) b.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            setupMap();
+        }
+
+        function drawMarkers() {
+            mapCtx.clearRect(0, 0, mapOverlay.width, mapOverlay.height);
+
+            markers.forEach((m, i) => {
+                const x = m.x * mapZoom;
+                const y = m.y * mapZoom;
+
+                // Draw marker
+                mapCtx.beginPath();
+                mapCtx.arc(x, y, 10, 0, Math.PI * 2);
+                mapCtx.fillStyle = 'rgba(255, 0, 0, 0.7)';
+                mapCtx.fill();
+                mapCtx.strokeStyle = '#fff';
+                mapCtx.lineWidth = 2;
+                mapCtx.stroke();
+
+                // Draw label
+                mapCtx.fillStyle = '#fff';
+                mapCtx.font = 'bold 12px Arial';
+                mapCtx.fillText(m.name, x + 15, y + 5);
+            });
+        }
+
+        function updateMarkersList() {
+            const list = document.getElementById('markers-list');
+            if (markers.length === 0) {
+                list.innerHTML = 'No markers yet - click on the map to add';
+                return;
+            }
+
+            list.innerHTML = markers.map((m, i) => `
+                <div class="marker-item">
+                    <span>${m.name}: (${m.x}, ${m.y})</span>
+                    <button onclick="removeMarker(${i})" style="padding: 4px 8px;">X</button>
+                </div>
+            `).join('');
+        }
+
+        function removeMarker(index) {
+            markers.splice(index, 1);
+            drawMarkers();
+            updateMarkersList();
+            updateOutput();
+        }
+
+        // Map click handler
+        mapOverlay.addEventListener('click', (e) => {
+            const rect = mapOverlay.getBoundingClientRect();
+            const x = Math.round((e.clientX - rect.left) / mapZoom);
+            const y = Math.round((e.clientY - rect.top) / mapZoom);
+            const name = document.getElementById('markerName').value || 'Task';
+
+            markers.push({ name, x, y });
+            drawMarkers();
+            updateMarkersList();
+            updateOutput();
+        });
+
+        // Mouse move for coords
+        mapOverlay.addEventListener('mousemove', (e) => {
+            const rect = mapOverlay.getBoundingClientRect();
+            const x = Math.round((e.clientX - rect.left) / mapZoom);
+            const y = Math.round((e.clientY - rect.top) / mapZoom);
+            document.getElementById('posX').textContent = x;
+            document.getElementById('posY').textContent = y;
+        });
+
+        // Auto-update combined when inputs change
+        document.getElementById('sprite2X').addEventListener('input', () => { updateCombined(); updateOutput(); });
+        document.getElementById('sprite2Y').addEventListener('input', () => { updateCombined(); updateOutput(); });
+        document.getElementById('combineScale').addEventListener('input', updateCombined);
+    </script>
+</body>
+</html>

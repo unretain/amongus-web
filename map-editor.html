@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Map Editor - Among Us Clone</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a2e;
+            color: white;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #sidebar {
+            width: 300px;
+            background: #16213e;
+            padding: 15px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        h1 { font-size: 18px; color: #ffcc00; }
+        h3 { font-size: 14px; margin-bottom: 8px; color: #aaa; }
+        .tool-group {
+            background: #0f3460;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        .tool-btn {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            background: #e94560;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .tool-btn:hover { background: #ff6b6b; }
+        .tool-btn.active { background: #4ecca3; }
+        .tool-btn.secondary { background: #533483; }
+        .tool-btn.secondary:hover { background: #7952a3; }
+        #canvas-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+        #mapCanvas {
+            position: absolute;
+            cursor: crosshair;
+        }
+        .shape-item {
+            background: #1a1a2e;
+            padding: 8px;
+            margin: 5px 0;
+            border-radius: 4px;
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .shape-item button {
+            background: #e94560;
+            border: none;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        #shapeList {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        textarea {
+            width: 100%;
+            height: 150px;
+            background: #1a1a2e;
+            color: #4ecca3;
+            border: 1px solid #333;
+            padding: 8px;
+            font-family: monospace;
+            font-size: 11px;
+            resize: vertical;
+        }
+        .controls {
+            font-size: 12px;
+            color: #888;
+            line-height: 1.6;
+        }
+        label {
+            display: block;
+            margin: 5px 0;
+            font-size: 12px;
+        }
+        input[type="color"] {
+            width: 50px;
+            height: 25px;
+            border: none;
+            cursor: pointer;
+        }
+        input[type="number"] {
+            width: 60px;
+            padding: 3px;
+            background: #1a1a2e;
+            color: white;
+            border: 1px solid #333;
+        }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <h1>Map Editor</h1>
+
+        <div class="tool-group">
+            <h3>Drawing Tools</h3>
+            <button class="tool-btn active" id="boxTool">Box (Rectangle)</button>
+            <button class="tool-btn" id="lineTool">Line</button>
+            <button class="tool-btn" id="selectTool">Select/Move</button>
+        </div>
+
+        <div class="tool-group">
+            <h3>Color</h3>
+            <label>Fill: <input type="color" id="fillColor" value="#ffff00"></label>
+            <label>Stroke: <input type="color" id="strokeColor" value="#ffcc00"></label>
+            <label>Line Width: <input type="number" id="lineWidth" value="3" min="1" max="20"></label>
+        </div>
+
+        <div class="tool-group">
+            <h3>Shapes (<span id="shapeCount">0</span>)</h3>
+            <div id="shapeList"></div>
+        </div>
+
+        <div class="tool-group">
+            <h3>Actions</h3>
+            <button class="tool-btn secondary" id="clearAll">Clear All</button>
+            <button class="tool-btn secondary" id="exportJson">Export JSON</button>
+            <button class="tool-btn secondary" id="loadJson">Load JSON</button>
+        </div>
+
+        <div class="tool-group">
+            <h3>Output (Game Coords)</h3>
+            <textarea id="output" readonly placeholder="Draw shapes to see output..."></textarea>
+        </div>
+
+        <div class="controls">
+            <strong>Controls:</strong><br>
+            Mouse wheel: Zoom<br>
+            Right-click drag: Pan<br>
+            Left-click: Draw/Select<br>
+            Delete key: Remove selected
+        </div>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="mapCanvas"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('mapCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('canvas-container');
+
+        // Map image
+        const mapImage = new Image();
+        let mapLoaded = false;
+
+        // View state
+        let zoom = 0.3;
+        let panX = 0;
+        let panY = 0;
+        let isPanning = false;
+        let lastMouseX = 0;
+        let lastMouseY = 0;
+
+        // Drawing state
+        let currentTool = 'box';
+        let isDrawing = false;
+        let startX = 0;
+        let startY = 0;
+        let currentX = 0;
+        let currentY = 0;
+
+        // Shapes array
+        let shapes = [];
+        let selectedShape = null;
+        let isDragging = false;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+
+        // Settings
+        let fillColor = '#ffff00';
+        let strokeColor = '#ffcc00';
+        let lineWidth = 3;
+
+        // Scale factor (map is 8564x4793, game uses 0.25 scale = 2141x1198)
+        const GAME_SCALE = 0.25;
+
+        // Load map image
+        mapImage.onload = () => {
+            mapLoaded = true;
+            resizeCanvas();
+            render();
+        };
+        mapImage.src = '/assets/skeld-full.webp';
+
+        function resizeCanvas() {
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            render();
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        function screenToMap(sx, sy) {
+            return {
+                x: (sx - panX) / zoom,
+                y: (sy - panY) / zoom
+            };
+        }
+
+        function mapToScreen(mx, my) {
+            return {
+                x: mx * zoom + panX,
+                y: my * zoom + panY
+            };
+        }
+
+        function mapToGame(mx, my) {
+            return {
+                x: Math.round(mx * GAME_SCALE),
+                y: Math.round(my * GAME_SCALE)
+            };
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            ctx.save();
+            ctx.translate(panX, panY);
+            ctx.scale(zoom, zoom);
+
+            // Draw map
+            if (mapLoaded) {
+                ctx.drawImage(mapImage, 0, 0);
+            }
+
+            // Draw all shapes
+            for (const shape of shapes) {
+                drawShape(shape, shape === selectedShape);
+            }
+
+            // Draw current shape being drawn
+            if (isDrawing) {
+                const tempShape = {
+                    type: currentTool,
+                    x: Math.min(startX, currentX),
+                    y: Math.min(startY, currentY),
+                    width: Math.abs(currentX - startX),
+                    height: Math.abs(currentY - startY),
+                    x1: startX, y1: startY,
+                    x2: currentX, y2: currentY,
+                    fillColor, strokeColor, lineWidth
+                };
+                drawShape(tempShape, false);
+            }
+
+            ctx.restore();
+        }
+
+        function drawShape(shape, selected) {
+            ctx.strokeStyle = shape.strokeColor || strokeColor;
+            ctx.fillStyle = shape.fillColor || fillColor;
+            ctx.lineWidth = (shape.lineWidth || lineWidth) / zoom;
+
+            if (shape.type === 'box') {
+                ctx.globalAlpha = 0.3;
+                ctx.fillRect(shape.x, shape.y, shape.width, shape.height);
+                ctx.globalAlpha = 1;
+                ctx.strokeRect(shape.x, shape.y, shape.width, shape.height);
+            } else if (shape.type === 'line') {
+                ctx.beginPath();
+                ctx.moveTo(shape.x1, shape.y1);
+                ctx.lineTo(shape.x2, shape.y2);
+                ctx.stroke();
+            }
+
+            if (selected) {
+                ctx.strokeStyle = '#00ffff';
+                ctx.lineWidth = 3 / zoom;
+                ctx.setLineDash([10 / zoom, 5 / zoom]);
+                if (shape.type === 'box') {
+                    ctx.strokeRect(shape.x - 5/zoom, shape.y - 5/zoom, shape.width + 10/zoom, shape.height + 10/zoom);
+                } else if (shape.type === 'line') {
+                    ctx.beginPath();
+                    ctx.arc(shape.x1, shape.y1, 10/zoom, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(shape.x2, shape.y2, 10/zoom, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+                ctx.setLineDash([]);
+            }
+        }
+
+        function updateShapeList() {
+            const list = document.getElementById('shapeList');
+            document.getElementById('shapeCount').textContent = shapes.length;
+
+            list.innerHTML = shapes.map((shape, i) => {
+                const gameCoords = shape.type === 'box'
+                    ? `(${mapToGame(shape.x, shape.y).x}, ${mapToGame(shape.x, shape.y).y})`
+                    : `(${mapToGame(shape.x1, shape.y1).x}, ${mapToGame(shape.x1, shape.y1).y})`;
+                return `<div class="shape-item" data-index="${i}">
+                    <span>${shape.type} ${gameCoords}</span>
+                    <button onclick="deleteShape(${i})">X</button>
+                </div>`;
+            }).join('');
+
+            updateOutput();
+        }
+
+        function updateOutput() {
+            const output = shapes.map(shape => {
+                if (shape.type === 'box') {
+                    const g = mapToGame(shape.x, shape.y);
+                    const gw = Math.round(shape.width * GAME_SCALE);
+                    const gh = Math.round(shape.height * GAME_SCALE);
+                    return `{ type: 'box', x: ${g.x}, y: ${g.y}, width: ${gw}, height: ${gh} }`;
+                } else {
+                    const g1 = mapToGame(shape.x1, shape.y1);
+                    const g2 = mapToGame(shape.x2, shape.y2);
+                    return `{ type: 'line', x1: ${g1.x}, y1: ${g1.y}, x2: ${g2.x}, y2: ${g2.y} }`;
+                }
+            });
+            document.getElementById('output').value = '[\n  ' + output.join(',\n  ') + '\n]';
+        }
+
+        function deleteShape(index) {
+            shapes.splice(index, 1);
+            selectedShape = null;
+            updateShapeList();
+            render();
+        }
+
+        function findShapeAt(mx, my) {
+            for (let i = shapes.length - 1; i >= 0; i--) {
+                const shape = shapes[i];
+                if (shape.type === 'box') {
+                    if (mx >= shape.x && mx <= shape.x + shape.width &&
+                        my >= shape.y && my <= shape.y + shape.height) {
+                        return shape;
+                    }
+                } else if (shape.type === 'line') {
+                    const dist = pointToLineDistance(mx, my, shape.x1, shape.y1, shape.x2, shape.y2);
+                    if (dist < 20) return shape;
+                }
+            }
+            return null;
+        }
+
+        function pointToLineDistance(px, py, x1, y1, x2, y2) {
+            const A = px - x1;
+            const B = py - y1;
+            const C = x2 - x1;
+            const D = y2 - y1;
+            const dot = A * C + B * D;
+            const lenSq = C * C + D * D;
+            let param = -1;
+            if (lenSq !== 0) param = dot / lenSq;
+            let xx, yy;
+            if (param < 0) { xx = x1; yy = y1; }
+            else if (param > 1) { xx = x2; yy = y2; }
+            else { xx = x1 + param * C; yy = y1 + param * D; }
+            return Math.sqrt((px - xx) ** 2 + (py - yy) ** 2);
+        }
+
+        // Mouse events
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const sx = e.clientX - rect.left;
+            const sy = e.clientY - rect.top;
+            const map = screenToMap(sx, sy);
+
+            if (e.button === 2) {
+                isPanning = true;
+                lastMouseX = e.clientX;
+                lastMouseY = e.clientY;
+                return;
+            }
+
+            if (currentTool === 'select') {
+                selectedShape = findShapeAt(map.x, map.y);
+                if (selectedShape) {
+                    isDragging = true;
+                    if (selectedShape.type === 'box') {
+                        dragOffsetX = map.x - selectedShape.x;
+                        dragOffsetY = map.y - selectedShape.y;
+                    } else {
+                        dragOffsetX = map.x - selectedShape.x1;
+                        dragOffsetY = map.y - selectedShape.y1;
+                    }
+                }
+                render();
+            } else {
+                isDrawing = true;
+                startX = map.x;
+                startY = map.y;
+                currentX = map.x;
+                currentY = map.y;
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const sx = e.clientX - rect.left;
+            const sy = e.clientY - rect.top;
+            const map = screenToMap(sx, sy);
+
+            if (isPanning) {
+                panX += e.clientX - lastMouseX;
+                panY += e.clientY - lastMouseY;
+                lastMouseX = e.clientX;
+                lastMouseY = e.clientY;
+                render();
+                return;
+            }
+
+            if (isDragging && selectedShape) {
+                if (selectedShape.type === 'box') {
+                    selectedShape.x = map.x - dragOffsetX;
+                    selectedShape.y = map.y - dragOffsetY;
+                } else {
+                    const dx = map.x - dragOffsetX - selectedShape.x1;
+                    const dy = map.y - dragOffsetY - selectedShape.y1;
+                    selectedShape.x1 += dx;
+                    selectedShape.y1 += dy;
+                    selectedShape.x2 += dx;
+                    selectedShape.y2 += dy;
+                    dragOffsetX = map.x - selectedShape.x1;
+                    dragOffsetY = map.y - selectedShape.y1;
+                }
+                updateOutput();
+                render();
+            }
+
+            if (isDrawing) {
+                currentX = map.x;
+                currentY = map.y;
+                render();
+            }
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            if (isPanning) {
+                isPanning = false;
+                return;
+            }
+
+            if (isDragging) {
+                isDragging = false;
+                updateShapeList();
+                return;
+            }
+
+            if (isDrawing) {
+                isDrawing = false;
+
+                const minSize = 10;
+                if (currentTool === 'box') {
+                    const width = Math.abs(currentX - startX);
+                    const height = Math.abs(currentY - startY);
+                    if (width > minSize && height > minSize) {
+                        shapes.push({
+                            type: 'box',
+                            x: Math.min(startX, currentX),
+                            y: Math.min(startY, currentY),
+                            width, height,
+                            fillColor, strokeColor, lineWidth
+                        });
+                    }
+                } else if (currentTool === 'line') {
+                    const length = Math.sqrt((currentX - startX) ** 2 + (currentY - startY) ** 2);
+                    if (length > minSize) {
+                        shapes.push({
+                            type: 'line',
+                            x1: startX, y1: startY,
+                            x2: currentX, y2: currentY,
+                            strokeColor, lineWidth
+                        });
+                    }
+                }
+                updateShapeList();
+                render();
+            }
+        });
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+
+            const oldZoom = zoom;
+            zoom *= e.deltaY < 0 ? 1.1 : 0.9;
+            zoom = Math.max(0.05, Math.min(2, zoom));
+
+            panX = mx - (mx - panX) * (zoom / oldZoom);
+            panY = my - (my - panY) * (zoom / oldZoom);
+
+            render();
+        });
+
+        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        // Keyboard
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Delete' && selectedShape) {
+                const idx = shapes.indexOf(selectedShape);
+                if (idx >= 0) deleteShape(idx);
+            }
+        });
+
+        // Tool buttons
+        document.getElementById('boxTool').addEventListener('click', () => {
+            currentTool = 'box';
+            document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('boxTool').classList.add('active');
+        });
+
+        document.getElementById('lineTool').addEventListener('click', () => {
+            currentTool = 'line';
+            document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('lineTool').classList.add('active');
+        });
+
+        document.getElementById('selectTool').addEventListener('click', () => {
+            currentTool = 'select';
+            document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('selectTool').classList.add('active');
+        });
+
+        // Color/settings
+        document.getElementById('fillColor').addEventListener('input', (e) => fillColor = e.target.value);
+        document.getElementById('strokeColor').addEventListener('input', (e) => strokeColor = e.target.value);
+        document.getElementById('lineWidth').addEventListener('input', (e) => lineWidth = parseInt(e.target.value));
+
+        // Actions
+        document.getElementById('clearAll').addEventListener('click', () => {
+            if (confirm('Clear all shapes?')) {
+                shapes = [];
+                selectedShape = null;
+                updateShapeList();
+                render();
+            }
+        });
+
+        document.getElementById('exportJson').addEventListener('click', () => {
+            const json = JSON.stringify(shapes, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'map-shapes.json';
+            a.click();
+        });
+
+        document.getElementById('loadJson').addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    try {
+                        shapes = JSON.parse(ev.target.result);
+                        updateShapeList();
+                        render();
+                    } catch (err) {
+                        alert('Invalid JSON file');
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        });
+
+        // Initial render
+        resizeCanvas();
+    </script>
+</body>
+</html>

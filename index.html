@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Among Us Web Clone</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Varela+Round&display=swap" rel="stylesheet">
+    <style>
+        @font-face {
+            font-family: 'Barlow';
+            src: url('/assets/Barlow-Black.ttf') format('truetype');
+            font-weight: 900;
+        }
+        @font-face {
+            font-family: 'Barlow';
+            src: url('/assets/Barlow-Bold.ttf') format('truetype');
+            font-weight: bold;
+        }
+        @font-face {
+            font-family: 'Barlow';
+            src: url('/assets/Barlow-SemiBold.ttf') format('truetype');
+            font-weight: 600;
+        }
+        @font-face {
+            font-family: 'Courier Bold';
+            src: url('/assets/courbd.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'In Your Face Joffrey';
+            src: url('/assets/fonts/in-your-face-joffrey.ttf') format('truetype');
+        }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            background: #000;
+            overflow: hidden;
+        }
+        #game-container {
+            width: 100%;
+            height: 100%;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game"></canvas>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+</body>
+</html>

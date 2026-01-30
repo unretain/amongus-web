@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Find Walk Frames on PlayerAnimations.png</title>
+    <style>
+        body { background: #111; color: white; font-family: monospace; margin: 0; }
+        #info { position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.95); padding: 15px; z-index: 100; max-width: 500px; }
+        #preview { position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.95); padding: 15px; z-index: 100; }
+        #preview canvas { border: 2px solid #0ff; background: #333; image-rendering: pixelated; }
+        canvas#main { cursor: crosshair; image-rendering: pixelated; }
+        .coords { color: #0ff; font-size: 14px; margin: 5px 0; }
+        button { margin: 3px; padding: 8px 12px; cursor: pointer; background: #444; color: white; border: 1px solid #666; }
+        button:hover { background: #666; }
+        #savedFrames { background: #222; padding: 10px; margin-top: 10px; max-height: 300px; overflow-y: auto; font-size: 11px; }
+        .frame-item { padding: 5px; border-bottom: 1px solid #333; }
+        .frame-item:hover { background: #333; }
+        h4 { color: #ff0; margin: 10px 0 5px 0; }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h3>Find Walk Frames - PlayerAnimations.png</h3>
+        <p>Idle works at (605, 525) Unity coords. Find walk frames!</p>
+        <div class="coords" id="mouseCoords">Hover over sprite</div>
+        <div class="coords" id="selection">Drag to select a walk frame</div>
+        <div>
+            <button id="saveBtn">Save Frame</button>
+            <button id="clearBtn">Clear Selection</button>
+            <button id="exportBtn">Export All</button>
+        </div>
+        <h4>Saved Walk Frames:</h4>
+        <div id="savedFrames"></div>
+    </div>
+    <div id="preview">
+        <h4>Preview (2x scale)</h4>
+        <canvas id="previewCanvas" width="300" height="300"></canvas>
+        <p id="previewInfo"></p>
+    </div>
+    <canvas id="main"></canvas>
+
+    <script>
+        const canvas = document.getElementById('main');
+        const ctx = canvas.getContext('2d');
+        const previewCanvas = document.getElementById('previewCanvas');
+        const previewCtx = previewCanvas.getContext('2d');
+
+        let img = new Image();
+        let startX = null, startY = null, endX = null, endY = null;
+        let isDragging = false;
+        let savedFrames = [];
+
+        img.onload = () => {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            redraw();
+            document.getElementById('mouseCoords').textContent = `Texture: ${img.width}x${img.height}`;
+        };
+        img.src = '/assets/PlayerAnimations.png';
+
+        function redraw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+
+            // Draw saved frames
+            ctx.strokeStyle = '#0f0';
+            ctx.lineWidth = 2;
+            savedFrames.forEach((f, i) => {
+                const canvasY = img.height - f.y - f.height;
+                ctx.strokeRect(f.x, canvasY, f.width, f.height);
+                ctx.fillStyle = '#0f0';
+                ctx.font = '12px monospace';
+                ctx.fillText(i + 1, f.x + 2, canvasY + 12);
+            });
+
+            // Draw current selection
+            if (startX !== null && endX !== null) {
+                const x = Math.min(startX, endX);
+                const y = Math.min(startY, endY);
+                const w = Math.abs(endX - startX);
+                const h = Math.abs(endY - startY);
+
+                ctx.strokeStyle = '#0ff';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x, y, w, h);
+
+                // Update preview at 2x
+                previewCanvas.width = w * 2;
+                previewCanvas.height = h * 2;
+                previewCtx.imageSmoothingEnabled = false;
+                previewCtx.drawImage(img, x, y, w, h, 0, 0, w * 2, h * 2);
+            }
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            startX = Math.round(e.clientX - rect.left);
+            startY = Math.round(e.clientY - rect.top);
+            endX = startX;
+            endY = startY;
+            isDragging = true;
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = Math.round(e.clientX - rect.left);
+            const y = Math.round(e.clientY - rect.top);
+            const unityY = img.height - y;
+
+            document.getElementById('mouseCoords').textContent = `Canvas: (${x}, ${y}) | Unity Y: ${unityY}`;
+
+            if (isDragging) {
+                endX = x;
+                endY = y;
+                redraw();
+                updateSelection();
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            isDragging = false;
+            updateSelection();
+        });
+
+        function updateSelection() {
+            if (startX === null || endX === null) return;
+
+            const x = Math.min(startX, endX);
+            const y = Math.min(startY, endY);
+            const w = Math.abs(endX - startX);
+            const h = Math.abs(endY - startY);
+            const unityY = img.height - y - h;
+
+            document.getElementById('selection').innerHTML =
+                `Selected: x=${x}, unityY=${unityY}, ${w}x${h}`;
+            document.getElementById('previewInfo').textContent = `${w}x${h} pixels`;
+        }
+
+        document.getElementById('saveBtn').addEventListener('click', () => {
+            if (startX === null || endX === null) return;
+
+            const x = Math.min(startX, endX);
+            const y = Math.min(startY, endY);
+            const w = Math.abs(endX - startX);
+            const h = Math.abs(endY - startY);
+            const unityY = img.height - y - h;
+
+            savedFrames.push({
+                name: `walk_${savedFrames.length + 1}`,
+                x: x,
+                y: unityY,
+                width: w,
+                height: h,
+                pivot: { x: 0.5, y: 0.5 }
+            });
+
+            updateSavedList();
+            redraw();
+            startX = startY = endX = endY = null;
+        });
+
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            startX = startY = endX = endY = null;
+            redraw();
+            previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+        });
+
+        document.getElementById('exportBtn').addEventListener('click', () => {
+            const json = JSON.stringify(savedFrames, null, 2);
+            console.log('Walk frames JSON:');
+            console.log(json);
+            navigator.clipboard.writeText(json);
+            alert('Copied ' + savedFrames.length + ' frames to clipboard!\nCheck console for JSON.');
+        });
+
+        function updateSavedList() {
+            const container = document.getElementById('savedFrames');
+            container.innerHTML = savedFrames.map((f, i) =>
+                `<div class="frame-item">${i+1}. x=${f.x}, y=${f.y}, ${f.width}x${f.height}</div>`
+            ).join('');
+        }
+    </script>
+</body>
+</html>

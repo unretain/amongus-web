@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Upload Data Task - Sprite Assembler</title>
+    <style>
+        body {
+            background: #1a1a2e;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 15px;
+        }
+        #main-container {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .panel {
+            background: rgba(0,0,0,0.5);
+            padding: 15px;
+            border-radius: 8px;
+        }
+        #source-panel {
+            flex: 0 0 auto;
+            max-height: 90vh;
+            overflow: auto;
+            min-width: 700px;
+        }
+        #source-container {
+            max-width: none !important;
+            max-height: 70vh;
+            overflow: auto;
+            border: 2px solid #444;
+        }
+        #preview-panel {
+            flex: 1;
+            min-width: 400px;
+        }
+        canvas {
+            display: block;
+            cursor: crosshair;
+            background: #333;
+        }
+        h3 {
+            margin-top: 0;
+            color: #0ff;
+        }
+        .controls {
+            margin-bottom: 15px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+        button {
+            padding: 8px 14px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            background: #444;
+            color: #fff;
+        }
+        button:hover { background: #666; }
+        button.active { background: #0088ff; }
+        .tool-btn { background: #555; }
+        .tool-btn.active { background: #0088ff; }
+        .danger { background: #ff4444; }
+        .success { background: #00aa00; }
+        .warning { background: #ff8800; }
+        input[type="number"], input[type="text"] {
+            width: 70px;
+            padding: 6px;
+            background: #333;
+            border: 1px solid #555;
+            color: #fff;
+            border-radius: 4px;
+        }
+        input[type="text"] { width: 150px; }
+        input[type="range"] {
+            width: 120px;
+        }
+        label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 13px;
+        }
+        #sprite-list {
+            max-height: 300px;
+            overflow-y: auto;
+            background: rgba(0,0,0,0.3);
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .sprite-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            margin: 4px 0;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .sprite-item:hover { background: rgba(255,255,255,0.2); }
+        .sprite-item.selected {
+            background: rgba(0,136,255,0.4);
+            outline: 2px solid #0088ff;
+        }
+        .sprite-item canvas { cursor: pointer; }
+        .sprite-item input { flex: 1; }
+        #selection-box {
+            position: absolute;
+            border: 2px dashed #0f0;
+            background: rgba(0, 255, 0, 0.1);
+            pointer-events: none;
+            display: none;
+        }
+        #coords {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.8);
+            padding: 10px;
+            border-radius: 8px;
+            font-family: monospace;
+            z-index: 100;
+        }
+        #output {
+            background: #1a1a2e;
+            padding: 15px;
+            border-radius: 5px;
+            max-height: 300px;
+            overflow: auto;
+            font-family: monospace;
+            font-size: 11px;
+            white-space: pre;
+            margin-top: 15px;
+        }
+        #preview-canvas {
+            border: 2px solid #444;
+        }
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+        }
+        .checkbox-label input {
+            width: auto;
+        }
+        .placed-sprite {
+            position: absolute;
+            cursor: move;
+            outline: 2px solid transparent;
+        }
+        .placed-sprite:hover { outline: 2px solid #0ff; }
+        .placed-sprite.selected { outline: 2px solid #0f0; }
+        .section-title {
+            color: #ff0;
+            font-size: 14px;
+            margin: 15px 0 8px 0;
+            border-bottom: 1px solid #555;
+            padding-bottom: 5px;
+        }
+        #instructions {
+            background: rgba(0,100,100,0.3);
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 12px;
+        }
+        #instructions li { margin: 4px 0; }
+    </style>
+</head>
+<body>
+    <h2 style="color: #0ff; margin-top: 0;">Upload Data Task - Sprite Assembler</h2>
+
+    <div class="controls" style="margin-bottom: 15px; background: rgba(0,100,0,0.3); padding: 10px; border-radius: 8px;">
+        <strong>Load Sprite Sheet:</strong>
+        <input type="file" id="fileInput" accept="image/*" style="margin-left: 10px;">
+        <span id="loadStatus" style="margin-left: 10px; color: #888;"></span>
+    </div>
+
+    <div id="instructions">
+        <strong>Instructions:</strong>
+        <ol>
+            <li><strong>Select region:</strong> Click and drag on the source sprite sheet to select a sprite</li>
+            <li><strong>Cut options:</strong> Enable circle crop, adjust scale, set anchor point</li>
+            <li><strong>Cut sprite:</strong> Click "Cut Selection" to extract the sprite</li>
+            <li><strong>Place sprites:</strong> Drag from sprite list onto preview, or select and click</li>
+            <li><strong>Adjust:</strong> Arrow keys nudge selected sprite (Shift = 10px)</li>
+            <li><strong>Export:</strong> Get JSON with all sprite data and positions</li>
+        </ol>
+    </div>
+
+    <div id="main-container">
+        <div id="source-panel" class="panel">
+            <h3>Source: Upload Data Sprites</h3>
+
+            <div class="controls">
+                <strong>Tool:</strong>
+                <button class="tool-btn active" id="rectToolBtn" onclick="setTool('rect')">Rectangle</button>
+                <button class="tool-btn" id="circleToolBtn" onclick="setTool('circle')">Circle</button>
+                <button class="tool-btn" id="lassoToolBtn" onclick="setTool('lasso')">Lasso</button>
+                <span id="tool-info" style="margin-left: 10px; color: #888;">Click and drag to select</span>
+            </div>
+            <div class="controls">
+                <label>Zoom:
+                    <button onclick="setSourceZoom(1)">1x</button>
+                    <button onclick="setSourceZoom(2)">2x</button>
+                    <button onclick="setSourceZoom(3)" class="active" id="zoom3">3x</button>
+                    <button onclick="setSourceZoom(4)">4x</button>
+                    <button onclick="setSourceZoom(6)">6x</button>
+                    <button onclick="setSourceZoom(8)">8x</button>
+                </label>
+            </div>
+
+            <div id="source-container" style="position: relative; display: inline-block; overflow: auto; max-width: 100%;">
+                <canvas id="source-canvas"></canvas>
+                <div id="selection-box"></div>
+            </div>
+
+            <div class="section-title">Cut Options</div>
+            <div class="controls">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="circleCrop"> Circle Crop
+                </label>
+                <label>Scale:
+                    <input type="range" id="scaleSlider" min="0.1" max="3" step="0.1" value="1">
+                    <span id="scaleValue">1.0x</span>
+                </label>
+            </div>
+            <div class="controls">
+                <label>Name: <input type="text" id="spriteName" value="sprite" placeholder="Sprite name"></label>
+            </div>
+            <div class="controls">
+                <button class="success" onclick="cutSelection()">Cut Selection</button>
+                <button onclick="clearSelection()">Clear Selection</button>
+            </div>
+
+            <div class="section-title">Cut Sprites (<span id="spriteCount">0</span>)</div>
+            <div id="sprite-list">
+                <em>No sprites cut yet</em>
+            </div>
+            <div class="controls" style="margin-top:10px;">
+                <button class="danger" onclick="deleteSelectedSprite()">Delete Selected</button>
+                <button class="warning" onclick="clearAllSprites()">Clear All</button>
+                <button class="success" onclick="loadSpritesFromJSON()">Load JSON</button>
+            </div>
+        </div>
+
+        <div id="preview-panel" class="panel">
+            <h3>Task Preview</h3>
+            <div class="controls">
+                <label>Preview Zoom:
+                    <button onclick="setPreviewZoom(0.5)">0.5x</button>
+                    <button onclick="setPreviewZoom(1)" class="active" id="pzoom1">1x</button>
+                    <button onclick="setPreviewZoom(1.5)">1.5x</button>
+                    <button onclick="setPreviewZoom(2)">2x</button>
+                </label>
+                <label>BG:
+                    <button onclick="setPreviewBg('#1a1a2e')">Dark</button>
+                    <button onclick="setPreviewBg('#4a6fa5')">Blue</button>
+                    <button onclick="setPreviewBg('#333')">Gray</button>
+                </label>
+            </div>
+            <div class="controls">
+                <button class="danger" onclick="removeSelectedPlaced()">Remove Selected</button>
+                <button class="danger" onclick="clearAllPlaced()">Clear All Placed</button>
+            </div>
+
+            <div id="preview-container" style="position:relative; display:inline-block; overflow: auto;">
+                <canvas id="preview-canvas"></canvas>
+            </div>
+
+            <div class="section-title">Export</div>
+            <div class="controls">
+                <button class="success" onclick="exportJSON()">Export JSON</button>
+                <button onclick="copyToClipboard()">Copy to Clipboard</button>
+                <button onclick="exportJS()">Export JS Code</button>
+            </div>
+            <div id="output">// Export will appear here</div>
+        </div>
+    </div>
+
+    <div id="coords">X: 0, Y: 0</div>
+
+    <script>
+        // Source canvas
+        const sourceCanvas = document.getElementById('source-canvas');
+        const sourceCtx = sourceCanvas.getContext('2d');
+        let sourceImg = new Image();
+        let sourceZoom = 3;
+
+        // Preview canvas
+        const previewCanvas = document.getElementById('preview-canvas');
+        const previewCtx = previewCanvas.getContext('2d');
+        let previewZoom = 1;
+        let previewBg = '#4a6fa5'; // Default task background color
+
+        // Tool state
+        let currentTool = 'rect'; // 'rect', 'circle', or 'lasso'
+
+        // Selection state
+        let isSelecting = false;
+        let selStart = { x: 0, y: 0 };
+        let selEnd = { x: 0, y: 0 };
+        // Circle selection state
+        let circleCenter = null;
+        let circleRadius = 0;
+        // Lasso selection state
+        let lassoPoints = [];
+        let isLassoDrawing = false;
+        const selectionBox = document.getElementById('selection-box');
+
+        // Cut sprites
+        let cutSprites = [];
+        let selectedSpriteIndex = -1;
+
+        // Placed sprites on preview
+        let placedSprites = [];
+        let selectedPlacedIndex = -1;
+        let isDragging = false;
+        let dragOffset = { x: 0, y: 0 };
+
+        // Preview size (larger assembly area)
+        const PREVIEW_WIDTH = 700;
+        const PREVIEW_HEIGHT = 700;
+
+        // Load source image
+        sourceImg.onload = function() {
+            document.getElementById('loadStatus').textContent = `Loaded: ${sourceImg.width}x${sourceImg.height}`;
+            document.getElementById('loadStatus').style.color = '#0f0';
+            drawSource();
+        };
+        sourceImg.onerror = function() {
+            document.getElementById('loadStatus').textContent = 'Failed to load - use file picker above';
+            document.getElementById('loadStatus').style.color = '#f00';
+        };
+
+        // File input handler
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    sourceImg.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Try default path first (won't work unless asset is copied to web folder)
+        sourceImg.src = '/assets/tasks/Shields-sharedassets0.assets-59.png';
+
+        // Scale slider
+        document.getElementById('scaleSlider').addEventListener('input', (e) => {
+            document.getElementById('scaleValue').textContent = parseFloat(e.target.value).toFixed(1) + 'x';
+        });
+
+        function setTool(tool) {
+            currentTool = tool;
+            document.getElementById('rectToolBtn').classList.toggle('active', tool === 'rect');
+            document.getElementById('circleToolBtn').classList.toggle('active', tool === 'circle');
+            document.getElementById('lassoToolBtn').classList.toggle('active', tool === 'lasso');
+            const hints = {
+                'rect': 'Click and drag to select rectangle',
+                'circle': 'Click center, drag to set radius',
+                'lasso': 'Click to add points, double-click to close shape'
+            };
+            document.getElementById('tool-info').textContent = hints[tool] || '';
+            clearSelection();
+        }
+
+        function setSourceZoom(z) {
+            sourceZoom = z;
+            document.querySelectorAll('#source-panel .controls button').forEach(b => {
+                if (b.textContent.includes('x') && b.onclick?.toString().includes('setSourceZoom')) {
+                    b.classList.remove('active');
+                }
+            });
+            event.target.classList.add('active');
+            drawSource();
+            updateSelectionBox();
+        }
+
+        function setPreviewZoom(z) {
+            previewZoom = z;
+            document.querySelectorAll('#preview-panel .controls button').forEach(b => {
+                if (b.textContent.includes('x') && b.onclick?.toString().includes('setPreviewZoom')) {
+                    b.classList.remove('active');
+                }
+            });
+            event.target.classList.add('active');
+            drawPreview();
+        }
+
+        function setPreviewBg(color) {
+            previewBg = color;
+            drawPreview();
+        }
+
+        function drawSource() {
+            if (!sourceImg.complete) return;
+            sourceCanvas.width = sourceImg.width * sourceZoom;
+            sourceCanvas.height = sourceImg.height * sourceZoom;
+            sourceCtx.imageSmoothingEnabled = false;
+            sourceCtx.drawImage(sourceImg, 0, 0, sourceCanvas.width, sourceCanvas.height);
+        }
+
+        function drawPreview() {
+            previewCanvas.width = PREVIEW_WIDTH * previewZoom;
+            previewCanvas.height = PREVIEW_HEIGHT * previewZoom;
+
+            // Background
+            previewCtx.fillStyle = previewBg;
+            previewCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
+
+            // Grid for reference
+            previewCtx.strokeStyle = 'rgba(255,255,255,0.1)';
+            previewCtx.lineWidth = 1;
+            for (let x = 0; x < previewCanvas.width; x += 50 * previewZoom) {
+                previewCtx.beginPath();
+                previewCtx.moveTo(x, 0);
+                previewCtx.lineTo(x, previewCanvas.height);
+                previewCtx.stroke();
+            }
+            for (let y = 0; y < previewCanvas.height; y += 50 * previewZoom) {
+                previewCtx.beginPath();
+                previewCtx.moveTo(0, y);
+                previewCtx.lineTo(previewCanvas.width, y);
+                previewCtx.stroke();
+            }
+
+            // Draw placed sprites
+            previewCtx.imageSmoothingEnabled = true;
+            placedSprites.forEach((placed, index) => {
+                const sprite = cutSprites[placed.spriteIndex];
+                if (sprite && sprite.canvas) {
+                    const x = placed.x * previewZoom;
+                    const y = placed.y * previewZoom;
+                    const w = sprite.displayWidth * previewZoom;
+                    const h = sprite.displayHeight * previewZoom;
+
+                    previewCtx.drawImage(sprite.canvas, x, y, w, h);
+
+                    // Selection highlight
+                    if (index === selectedPlacedIndex) {
+                        previewCtx.strokeStyle = '#0f0';
+                        previewCtx.lineWidth = 2;
+                        previewCtx.strokeRect(x, y, w, h);
+                    }
+                }
+            });
+        }
+
+        // Source canvas mouse events
+        sourceCanvas.addEventListener('mousedown', (e) => {
+            const rect = sourceCanvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / sourceZoom);
+            const y = Math.floor((e.clientY - rect.top) / sourceZoom);
+
+            const clampedX = Math.max(0, Math.min(x, sourceImg.width));
+            const clampedY = Math.max(0, Math.min(y, sourceImg.height));
+
+            if (currentTool === 'lasso') {
+                // Lasso tool: click to add points
+                lassoPoints.push({ x: clampedX, y: clampedY });
+                isLassoDrawing = true;
+                drawLassoOverlay();
+                return;
+            }
+
+            isSelecting = true;
+
+            if (currentTool === 'circle') {
+                // Circle tool: click sets center
+                circleCenter = { x: clampedX, y: clampedY };
+                circleRadius = 0;
+            } else {
+                // Rectangle tool
+                selStart.x = clampedX;
+                selStart.y = clampedY;
+                selEnd.x = selStart.x;
+                selEnd.y = selStart.y;
+            }
+            updateSelectionBox();
+        });
+
+        // Double-click to close lasso
+        sourceCanvas.addEventListener('dblclick', (e) => {
+            if (currentTool === 'lasso' && lassoPoints.length >= 3) {
+                isLassoDrawing = false;
+                drawLassoOverlay();
+            }
+        });
+
+        sourceCanvas.addEventListener('mousemove', (e) => {
+            const rect = sourceCanvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / sourceZoom);
+            const y = Math.floor((e.clientY - rect.top) / sourceZoom);
+
+            const clampedX = Math.max(0, Math.min(x, sourceImg.width));
+            const clampedY = Math.max(0, Math.min(y, sourceImg.height));
+
+            document.getElementById('coords').textContent = `Source: ${clampedX}, ${clampedY}`;
+
+            if (currentTool === 'lasso' && isLassoDrawing && lassoPoints.length > 0) {
+                // Draw preview line to current mouse position
+                drawLassoOverlay({ x: clampedX, y: clampedY });
+                return;
+            }
+
+            if (isSelecting) {
+                if (currentTool === 'circle' && circleCenter) {
+                    // Calculate radius from center to current position
+                    const dx = clampedX - circleCenter.x;
+                    const dy = clampedY - circleCenter.y;
+                    circleRadius = Math.sqrt(dx * dx + dy * dy);
+                } else {
+                    selEnd.x = clampedX;
+                    selEnd.y = clampedY;
+                }
+                updateSelectionBox();
+            }
+        });
+
+        sourceCanvas.addEventListener('mouseup', () => { isSelecting = false; });
+        sourceCanvas.addEventListener('mouseleave', () => { /* keep selection */ });
+
+        function updateSelectionBox() {
+            if (currentTool === 'circle' && circleCenter && circleRadius > 0) {
+                // Circle selection
+                const r = Math.ceil(circleRadius);
+                const x = circleCenter.x - r;
+                const y = circleCenter.y - r;
+                const diameter = r * 2;
+
+                selectionBox.style.display = 'block';
+                selectionBox.style.left = (x * sourceZoom) + 'px';
+                selectionBox.style.top = (y * sourceZoom) + 'px';
+                selectionBox.style.width = (diameter * sourceZoom) + 'px';
+                selectionBox.style.height = (diameter * sourceZoom) + 'px';
+                selectionBox.style.borderRadius = '50%';
+            } else if (currentTool === 'rect') {
+                // Rectangle selection
+                const x1 = Math.min(selStart.x, selEnd.x);
+                const y1 = Math.min(selStart.y, selEnd.y);
+                const x2 = Math.max(selStart.x, selEnd.x);
+                const y2 = Math.max(selStart.y, selEnd.y);
+
+                selectionBox.style.display = 'block';
+                selectionBox.style.left = (x1 * sourceZoom) + 'px';
+                selectionBox.style.top = (y1 * sourceZoom) + 'px';
+                selectionBox.style.width = ((x2 - x1) * sourceZoom) + 'px';
+                selectionBox.style.height = ((y2 - y1) * sourceZoom) + 'px';
+
+                // Make it circular if circle crop checkbox is enabled
+                if (document.getElementById('circleCrop').checked) {
+                    selectionBox.style.borderRadius = '50%';
+                } else {
+                    selectionBox.style.borderRadius = '0';
+                }
+            }
+        }
+
+        function clearSelection() {
+            selectionBox.style.display = 'none';
+            selStart = { x: 0, y: 0 };
+            selEnd = { x: 0, y: 0 };
+            circleCenter = null;
+            circleRadius = 0;
+            lassoPoints = [];
+            isLassoDrawing = false;
+            drawSource(); // Clear lasso overlay
+        }
+
+        // Draw lasso selection on source canvas
+        function drawLassoOverlay(mousePos = null) {
+            drawSource(); // Redraw base image
+
+            if (lassoPoints.length === 0) return;
+
+            sourceCtx.strokeStyle = '#00ff00';
+            sourceCtx.lineWidth = 2;
+            sourceCtx.fillStyle = 'rgba(0, 255, 0, 0.2)';
+
+            sourceCtx.beginPath();
+            sourceCtx.moveTo(lassoPoints[0].x * sourceZoom, lassoPoints[0].y * sourceZoom);
+
+            for (let i = 1; i < lassoPoints.length; i++) {
+                sourceCtx.lineTo(lassoPoints[i].x * sourceZoom, lassoPoints[i].y * sourceZoom);
+            }
+
+            // Draw line to mouse position while drawing
+            if (mousePos && isLassoDrawing) {
+                sourceCtx.lineTo(mousePos.x * sourceZoom, mousePos.y * sourceZoom);
+            }
+
+            // Close the path if done drawing
+            if (!isLassoDrawing && lassoPoints.length >= 3) {
+                sourceCtx.closePath();
+                sourceCtx.fill();
+            }
+
+            sourceCtx.stroke();
+
+            // Draw points
+            sourceCtx.fillStyle = '#00ff00';
+            for (const pt of lassoPoints) {
+                sourceCtx.beginPath();
+                sourceCtx.arc(pt.x * sourceZoom, pt.y * sourceZoom, 4, 0, Math.PI * 2);
+                sourceCtx.fill();
+            }
+        }
+
+        function cutSelection() {
+            let x1, y1, w, h;
+            let isCircle = false;
+            let isLasso = false;
+            let lassoMask = null;
+
+            if (currentTool === 'lasso' && lassoPoints.length >= 3 && !isLassoDrawing) {
+                // Lasso tool selection - calculate bounding box
+                const xs = lassoPoints.map(p => p.x);
+                const ys = lassoPoints.map(p => p.y);
+                x1 = Math.min(...xs);
+                y1 = Math.min(...ys);
+                const x2 = Math.max(...xs);
+                const y2 = Math.max(...ys);
+                w = x2 - x1;
+                h = y2 - y1;
+                isLasso = true;
+                // Create mask relative to bounding box
+                lassoMask = lassoPoints.map(p => ({ x: p.x - x1, y: p.y - y1 }));
+            } else if (currentTool === 'circle' && circleCenter && circleRadius > 0) {
+                // Circle tool selection
+                const r = Math.ceil(circleRadius);
+                x1 = Math.floor(circleCenter.x - r);
+                y1 = Math.floor(circleCenter.y - r);
+                w = r * 2;
+                h = r * 2;
+                isCircle = true;
+            } else if (currentTool === 'rect') {
+                // Rectangle tool selection
+                x1 = Math.min(selStart.x, selEnd.x);
+                y1 = Math.min(selStart.y, selEnd.y);
+                w = Math.abs(selEnd.x - selStart.x);
+                h = Math.abs(selEnd.y - selStart.y);
+            } else {
+                alert('Please make a selection first! (For lasso, double-click to close shape)');
+                return;
+            }
+
+            if (w < 3 || h < 3) {
+                alert('Selection too small. Please select a larger area.');
+                return;
+            }
+
+            // For circle tool, always apply circle crop; for rect tool, check checkbox
+            const circleCrop = isCircle || document.getElementById('circleCrop').checked;
+            const scale = parseFloat(document.getElementById('scaleSlider').value);
+            const name = document.getElementById('spriteName').value || `sprite_${cutSprites.length + 1}`;
+
+            // Create canvas with cut sprite
+            const spriteCanvas = document.createElement('canvas');
+            const scaledW = Math.round(w * scale);
+            const scaledH = Math.round(h * scale);
+            spriteCanvas.width = scaledW;
+            spriteCanvas.height = scaledH;
+            const spriteCtx = spriteCanvas.getContext('2d');
+
+            // Draw the image region first
+            spriteCtx.imageSmoothingEnabled = true;
+            spriteCtx.imageSmoothingQuality = 'high';
+            spriteCtx.drawImage(sourceImg, x1, y1, w, h, 0, 0, scaledW, scaledH);
+
+            // Apply lasso mask if using lasso tool
+            if (isLasso && lassoMask) {
+                const imageData = spriteCtx.getImageData(0, 0, scaledW, scaledH);
+                const pixels = imageData.data;
+                // Scale the mask points
+                const scaledMask = lassoMask.map(p => ({ x: p.x * scale, y: p.y * scale }));
+                for (let py = 0; py < scaledH; py++) {
+                    for (let px = 0; px < scaledW; px++) {
+                        if (!pointInPolygon(px, py, scaledMask)) {
+                            const idx = (py * scaledW + px) * 4;
+                            pixels[idx + 3] = 0; // Set alpha to 0
+                        }
+                    }
+                }
+                spriteCtx.putImageData(imageData, 0, 0);
+            } else if (circleCrop) {
+                // Apply circle mask using pixel manipulation for clean edges
+                const imageData = spriteCtx.getImageData(0, 0, scaledW, scaledH);
+                const pixels = imageData.data;
+                const centerX = scaledW / 2;
+                const centerY = scaledH / 2;
+                const radiusX = scaledW / 2;
+                const radiusY = scaledH / 2;
+                for (let py = 0; py < scaledH; py++) {
+                    for (let px = 0; px < scaledW; px++) {
+                        const dx = (px - centerX) / radiusX;
+                        const dy = (py - centerY) / radiusY;
+                        if (dx * dx + dy * dy > 1) {
+                            const idx = (py * scaledW + px) * 4;
+                            pixels[idx + 3] = 0;
+                        }
+                    }
+                }
+                spriteCtx.putImageData(imageData, 0, 0);
+            }
+
+            cutSprites.push({
+                name: name,
+                sourceX: x1,
+                sourceY: y1,
+                sourceWidth: w,
+                sourceHeight: h,
+                displayWidth: scaledW,
+                displayHeight: scaledH,
+                scale: scale,
+                circleCrop: circleCrop || isLasso,
+                canvas: spriteCanvas,
+                isCircleTool: isCircle,
+                circleCenter: isCircle ? { x: circleCenter.x, y: circleCenter.y } : null,
+                circleRadius: isCircle ? circleRadius : null,
+                hasLassoMask: isLasso,
+                mask: isLasso ? lassoMask : null
+            });
+
+            // Auto-increment name
+            const nameMatch = name.match(/^(.+?)(\d+)?$/);
+            if (nameMatch) {
+                const base = nameMatch[1];
+                const num = nameMatch[2] ? parseInt(nameMatch[2]) + 1 : 2;
+                document.getElementById('spriteName').value = base + num;
+            }
+
+            updateSpriteList();
+            clearSelection();
+        }
+
+        function updateSpriteList() {
+            const list = document.getElementById('sprite-list');
+            document.getElementById('spriteCount').textContent = cutSprites.length;
+
+            if (cutSprites.length === 0) {
+                list.innerHTML = '<em>No sprites cut yet</em>';
+                return;
+            }
+
+            list.innerHTML = '';
+            cutSprites.forEach((sprite, index) => {
+                const item = document.createElement('div');
+                item.className = 'sprite-item' + (index === selectedSpriteIndex ? ' selected' : '');
+                item.onclick = () => selectSprite(index);
+
+                // Make draggable
+                item.draggable = true;
+                item.ondragstart = (e) => {
+                    e.dataTransfer.setData('spriteIndex', index.toString());
+                    e.dataTransfer.effectAllowed = 'copy';
+                    selectSprite(index);
+                };
+
+                // Preview canvas with checkerboard background to show transparency
+                const preview = document.createElement('canvas');
+                const maxSize = 50;
+                const scale = Math.min(maxSize / sprite.displayWidth, maxSize / sprite.displayHeight, 1);
+                preview.width = Math.max(20, sprite.displayWidth * scale);
+                preview.height = Math.max(20, sprite.displayHeight * scale);
+                preview.style.borderRadius = sprite.circleCrop ? '50%' : '4px';
+                const pCtx = preview.getContext('2d');
+
+                // Draw checkerboard background to show transparency
+                const checkerSize = 5;
+                for (let cy = 0; cy < preview.height; cy += checkerSize) {
+                    for (let cx = 0; cx < preview.width; cx += checkerSize) {
+                        pCtx.fillStyle = ((cx / checkerSize + cy / checkerSize) % 2 === 0) ? '#666' : '#444';
+                        pCtx.fillRect(cx, cy, checkerSize, checkerSize);
+                    }
+                }
+
+                pCtx.imageSmoothingEnabled = true;
+                pCtx.drawImage(sprite.canvas, 0, 0, preview.width, preview.height);
+
+                // Name input
+                const nameInput = document.createElement('input');
+                nameInput.type = 'text';
+                nameInput.value = sprite.name;
+                nameInput.onclick = (e) => e.stopPropagation();
+                nameInput.onchange = (e) => { sprite.name = e.target.value; };
+                nameInput.draggable = false;
+
+                // Info
+                const infoSpan = document.createElement('span');
+                infoSpan.style.color = '#888';
+                infoSpan.style.fontSize = '10px';
+                infoSpan.style.whiteSpace = 'nowrap';
+                infoSpan.textContent = `${sprite.displayWidth}x${sprite.displayHeight}`;
+                if (sprite.circleCrop) infoSpan.textContent += ' (circle)';
+
+                item.appendChild(preview);
+                item.appendChild(nameInput);
+                item.appendChild(infoSpan);
+                list.appendChild(item);
+            });
+        }
+
+        function selectSprite(index) {
+            selectedSpriteIndex = index;
+            updateSpriteList();
+        }
+
+        function deleteSelectedSprite() {
+            if (selectedSpriteIndex >= 0 && selectedSpriteIndex < cutSprites.length) {
+                // Remove placed instances
+                placedSprites = placedSprites.filter(p => p.spriteIndex !== selectedSpriteIndex);
+                placedSprites.forEach(p => {
+                    if (p.spriteIndex > selectedSpriteIndex) p.spriteIndex--;
+                });
+
+                cutSprites.splice(selectedSpriteIndex, 1);
+                selectedSpriteIndex = -1;
+                updateSpriteList();
+                drawPreview();
+            }
+        }
+
+        function clearAllSprites() {
+            if (confirm('Delete all cut sprites?')) {
+                cutSprites = [];
+                placedSprites = [];
+                selectedSpriteIndex = -1;
+                selectedPlacedIndex = -1;
+                updateSpriteList();
+                drawPreview();
+            }
+        }
+
+        // Preview canvas drag and drop
+        previewCanvas.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+        });
+
+        previewCanvas.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const spriteIndexStr = e.dataTransfer.getData('spriteIndex');
+            if (spriteIndexStr !== '') {
+                const spriteIndex = parseInt(spriteIndexStr);
+                const sprite = cutSprites[spriteIndex];
+                if (sprite) {
+                    const rect = previewCanvas.getBoundingClientRect();
+                    const x = (e.clientX - rect.left) / previewZoom;
+                    const y = (e.clientY - rect.top) / previewZoom;
+
+                    placedSprites.push({
+                        spriteIndex: spriteIndex,
+                        name: sprite.name,
+                        x: Math.round(x - sprite.displayWidth / 2),
+                        y: Math.round(y - sprite.displayHeight / 2)
+                    });
+                    selectedPlacedIndex = placedSprites.length - 1;
+                    drawPreview();
+                }
+            }
+        });
+
+        // Preview canvas mouse events
+        previewCanvas.addEventListener('mousedown', (e) => {
+            const rect = previewCanvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / previewZoom;
+            const y = (e.clientY - rect.top) / previewZoom;
+
+            // Check if clicking on existing placed sprite
+            for (let i = placedSprites.length - 1; i >= 0; i--) {
+                const placed = placedSprites[i];
+                const sprite = cutSprites[placed.spriteIndex];
+                if (sprite && x >= placed.x && x <= placed.x + sprite.displayWidth &&
+                    y >= placed.y && y <= placed.y + sprite.displayHeight) {
+                    selectedPlacedIndex = i;
+                    isDragging = true;
+                    dragOffset.x = x - placed.x;
+                    dragOffset.y = y - placed.y;
+                    drawPreview();
+                    return;
+                }
+            }
+
+            // If a sprite is selected in the list, place it
+            if (selectedSpriteIndex >= 0) {
+                const sprite = cutSprites[selectedSpriteIndex];
+                placedSprites.push({
+                    spriteIndex: selectedSpriteIndex,
+                    name: sprite.name,
+                    x: Math.round(x - sprite.displayWidth / 2),
+                    y: Math.round(y - sprite.displayHeight / 2)
+                });
+                selectedPlacedIndex = placedSprites.length - 1;
+                drawPreview();
+            } else {
+                selectedPlacedIndex = -1;
+                drawPreview();
+            }
+        });
+
+        previewCanvas.addEventListener('mousemove', (e) => {
+            const rect = previewCanvas.getBoundingClientRect();
+            const x = Math.round((e.clientX - rect.left) / previewZoom);
+            const y = Math.round((e.clientY - rect.top) / previewZoom);
+
+            document.getElementById('coords').textContent = `Preview: ${x}, ${y}`;
+
+            if (isDragging && selectedPlacedIndex >= 0) {
+                placedSprites[selectedPlacedIndex].x = Math.round(x - dragOffset.x);
+                placedSprites[selectedPlacedIndex].y = Math.round(y - dragOffset.y);
+                drawPreview();
+            }
+        });
+
+        previewCanvas.addEventListener('mouseup', () => { isDragging = false; });
+        previewCanvas.addEventListener('mouseleave', () => { isDragging = false; });
+
+        // Keyboard events
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT') return;
+
+            if (e.key === 'Delete' && selectedPlacedIndex >= 0) {
+                placedSprites.splice(selectedPlacedIndex, 1);
+                selectedPlacedIndex = -1;
+                drawPreview();
+            }
+
+            // Arrow keys to nudge
+            if (selectedPlacedIndex >= 0) {
+                const nudge = e.shiftKey ? 10 : 1;
+                if (e.key === 'ArrowUp') { placedSprites[selectedPlacedIndex].y -= nudge; drawPreview(); e.preventDefault(); }
+                if (e.key === 'ArrowDown') { placedSprites[selectedPlacedIndex].y += nudge; drawPreview(); e.preventDefault(); }
+                if (e.key === 'ArrowLeft') { placedSprites[selectedPlacedIndex].x -= nudge; drawPreview(); e.preventDefault(); }
+                if (e.key === 'ArrowRight') { placedSprites[selectedPlacedIndex].x += nudge; drawPreview(); e.preventDefault(); }
+            }
+        });
+
+        function removeSelectedPlaced() {
+            if (selectedPlacedIndex >= 0) {
+                placedSprites.splice(selectedPlacedIndex, 1);
+                selectedPlacedIndex = -1;
+                drawPreview();
+            }
+        }
+
+        function clearAllPlaced() {
+            if (confirm('Remove all placed sprites?')) {
+                placedSprites = [];
+                selectedPlacedIndex = -1;
+                drawPreview();
+            }
+        }
+
+        function exportJSON() {
+            const data = {
+                taskName: 'UploadData',
+                previewSize: { width: PREVIEW_WIDTH, height: PREVIEW_HEIGHT },
+                sourceImage: 'UploadData-sharedassets0.assets-116.png',
+                sprites: cutSprites.map(s => {
+                    const spriteData = {
+                        name: s.name,
+                        source: { x: s.sourceX, y: s.sourceY, w: s.sourceWidth, h: s.sourceHeight },
+                        display: { w: s.displayWidth, h: s.displayHeight },
+                        scale: s.scale,
+                        circleCrop: s.circleCrop
+                    };
+                    // Include lasso mask data if present
+                    if (s.hasLassoMask && s.mask && s.mask.length > 2) {
+                        spriteData.hasLassoMask = true;
+                        spriteData.mask = s.mask;
+                    }
+                    // Include circle data if present
+                    if (s.isCircle && s.circleRadius) {
+                        spriteData.isCircle = true;
+                        spriteData.radius = s.circleRadius;
+                    }
+                    return spriteData;
+                }),
+                placements: placedSprites.map(p => ({
+                    sprite: cutSprites[p.spriteIndex]?.name || 'unknown',
+                    x: p.x,
+                    y: p.y
+                }))
+            };
+
+            document.getElementById('output').textContent = JSON.stringify(data, null, 2);
+        }
+
+        function exportJS() {
+            let code = '// Upload Data Task Sprite Configuration\n';
+            code += 'const uploadDataSprites = {\n';
+            code += `    sourceImage: '/assets/tasks/UploadData.png',\n`;
+            code += '    sprites: {\n';
+
+            cutSprites.forEach(s => {
+                code += `        ${s.name}: {\n`;
+                code += `            src: { x: ${s.sourceX}, y: ${s.sourceY}, w: ${s.sourceWidth}, h: ${s.sourceHeight} },\n`;
+                code += `            display: { w: ${s.displayWidth}, h: ${s.displayHeight} },\n`;
+                code += `            circleCrop: ${s.circleCrop}`;
+                // Include lasso mask if present
+                if (s.hasLassoMask && s.mask && s.mask.length > 2) {
+                    code += `,\n            hasLassoMask: true,\n`;
+                    code += `            mask: ${JSON.stringify(s.mask)}`;
+                }
+                code += '\n        },\n';
+            });
+
+            code += '    },\n';
+            code += '    layout: [\n';
+
+            placedSprites.forEach(p => {
+                const sprite = cutSprites[p.spriteIndex];
+                if (sprite) {
+                    code += `        { sprite: '${sprite.name}', x: ${p.x}, y: ${p.y} },\n`;
+                }
+            });
+
+            code += '    ]\n';
+            code += '};\n';
+
+            document.getElementById('output').textContent = code;
+        }
+
+        function copyToClipboard() {
+            const text = document.getElementById('output').textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Copied to clipboard!');
+            });
+        }
+
+        // Helper: check if point is inside polygon using ray casting
+        function pointInPolygon(px, py, polygon) {
+            let inside = false;
+            for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+                const xi = polygon[i].x, yi = polygon[i].y;
+                const xj = polygon[j].x, yj = polygon[j].y;
+                if (((yi > py) !== (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi)) {
+                    inside = !inside;
+                }
+            }
+            return inside;
+        }
+
+        function loadSpritesFromJSON() {
+            const jsonStr = prompt('Paste your sprite JSON (from lasso-sprite-cutter):');
+            if (!jsonStr) return;
+
+            try {
+                const data = JSON.parse(jsonStr);
+                const sprites = data.sprites || data;
+
+                if (!Array.isArray(sprites)) {
+                    alert('Invalid JSON format. Expected { "sprites": [...] } or array of sprites.');
+                    return;
+                }
+
+                if (!sourceImg.complete || !sourceImg.naturalWidth) {
+                    alert('Please load the source image first!');
+                    return;
+                }
+
+                // Clear existing sprites
+                cutSprites = [];
+                let maskedCount = 0;
+
+                // Load each sprite from JSON
+                sprites.forEach(s => {
+                    const x = s.x;
+                    const y = s.y;
+                    const w = s.w;
+                    const h = s.h;
+                    const name = s.name || `sprite_${cutSprites.length}`;
+
+                    // Create canvas for this sprite
+                    const spriteCanvas = document.createElement('canvas');
+                    spriteCanvas.width = w;
+                    spriteCanvas.height = h;
+                    const spriteCtx = spriteCanvas.getContext('2d');
+                    spriteCtx.drawImage(sourceImg, x, y, w, h, 0, 0, w, h);
+
+                    // Check for lasso mask - support both hasLassoMask flag and just having mask array
+                    const hasMask = (s.hasLassoMask || (s.mask && Array.isArray(s.mask))) && s.mask.length > 2;
+
+                    // Apply lasso mask if present
+                    if (hasMask) {
+                        maskedCount++;
+                        const imageData = spriteCtx.getImageData(0, 0, w, h);
+                        const pixels = imageData.data;
+                        for (let py = 0; py < h; py++) {
+                            for (let px = 0; px < w; px++) {
+                                if (!pointInPolygon(px, py, s.mask)) {
+                                    const idx = (py * w + px) * 4;
+                                    pixels[idx + 3] = 0; // Set alpha to 0
+                                }
+                            }
+                        }
+                        spriteCtx.putImageData(imageData, 0, 0);
+                    }
+
+                    // Apply circle mask if present
+                    if (s.isCircle && s.radius) {
+                        const imageData = spriteCtx.getImageData(0, 0, w, h);
+                        const pixels = imageData.data;
+                        const centerX = w / 2;
+                        const centerY = h / 2;
+                        const r = s.radius;
+                        for (let py = 0; py < h; py++) {
+                            for (let px = 0; px < w; px++) {
+                                const dx = px - centerX;
+                                const dy = py - centerY;
+                                const dist = Math.sqrt(dx * dx + dy * dy);
+                                if (dist > r) {
+                                    const idx = (py * w + px) * 4;
+                                    pixels[idx + 3] = 0; // Set alpha to 0
+                                }
+                            }
+                        }
+                        spriteCtx.putImageData(imageData, 0, 0);
+                    }
+
+                    cutSprites.push({
+                        name: name,
+                        sourceX: x,
+                        sourceY: y,
+                        sourceWidth: w,
+                        sourceHeight: h,
+                        displayWidth: w,
+                        displayHeight: h,
+                        scale: 1,
+                        circleCrop: s.isCircle || hasMask,
+                        canvas: spriteCanvas,
+                        hasLassoMask: hasMask,
+                        mask: s.mask || null,
+                        isCircle: s.isCircle || false,
+                        circleRadius: s.radius || null
+                    });
+                });
+
+                updateSpriteList();
+                alert(`Loaded ${cutSprites.length} sprites from JSON! (${maskedCount} with lasso masks applied)`);
+
+            } catch (e) {
+                alert('Failed to parse JSON: ' + e.message);
+                console.error('JSON parse error:', e);
+            }
+        }
+
+        // Initialize
+        drawPreview();
+        updateSpriteList();
+    </script>
+</body>
+</html>

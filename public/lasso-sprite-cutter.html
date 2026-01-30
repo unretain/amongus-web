@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Lasso Sprite Cutter</title>
+    <style>
+        body {
+            background: #1a1a2e;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 15px;
+        }
+        #main-container {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .panel {
+            background: rgba(0,0,0,0.5);
+            padding: 15px;
+            border-radius: 8px;
+        }
+        #source-panel {
+            flex: 0 0 auto;
+            max-height: 90vh;
+            overflow: auto;
+            min-width: 700px;
+        }
+        #source-container {
+            position: relative;
+            display: inline-block;
+            overflow: auto;
+            max-height: 70vh;
+            border: 2px solid #444;
+        }
+        #preview-panel {
+            flex: 1;
+            min-width: 400px;
+        }
+        canvas {
+            display: block;
+        }
+        #preview-canvas {
+            background: #333;
+        }
+        #overlay-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            cursor: crosshair;
+            background: transparent;
+        }
+        h3 {
+            margin-top: 0;
+            color: #0ff;
+        }
+        .controls {
+            margin-bottom: 15px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+        button {
+            padding: 8px 14px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            background: #444;
+            color: #fff;
+        }
+        button:hover { background: #666; }
+        button.active { background: #0088ff; }
+        .danger { background: #ff4444; }
+        .success { background: #00aa00; }
+        .warning { background: #ff8800; }
+        input[type="number"], input[type="text"] {
+            width: 70px;
+            padding: 6px;
+            background: #333;
+            border: 1px solid #555;
+            color: #fff;
+            border-radius: 4px;
+        }
+        input[type="text"] { width: 150px; }
+        #sprite-list {
+            max-height: 300px;
+            overflow-y: auto;
+            background: rgba(0,0,0,0.3);
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .sprite-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            margin: 4px 0;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .sprite-item:hover { background: rgba(255,255,255,0.2); }
+        .sprite-item.selected {
+            background: rgba(0,136,255,0.4);
+            outline: 2px solid #0088ff;
+        }
+        .sprite-item canvas { cursor: pointer; background: transparent; }
+        .sprite-item input { flex: 1; }
+        #coords {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.8);
+            padding: 10px;
+            border-radius: 8px;
+            font-family: monospace;
+            z-index: 100;
+        }
+        #output {
+            background: #1a1a2e;
+            padding: 15px;
+            border-radius: 5px;
+            max-height: 300px;
+            overflow: auto;
+            font-family: monospace;
+            font-size: 11px;
+            white-space: pre;
+            margin-top: 15px;
+        }
+        .section-title {
+            color: #ff0;
+            font-size: 14px;
+            margin: 15px 0 8px 0;
+            border-bottom: 1px solid #555;
+            padding-bottom: 5px;
+        }
+        #instructions {
+            background: rgba(0,100,100,0.3);
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 12px;
+        }
+        #instructions li { margin: 4px 0; }
+        .tool-btn {
+            min-width: 80px;
+        }
+        .tool-btn.active {
+            background: #ff6600;
+        }
+        #lasso-info {
+            color: #aaa;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        #preview-canvas {
+            background: repeating-conic-gradient(#555 0% 25%, #444 0% 50%) 50% / 20px 20px;
+        }
+    </style>
+</head>
+<body>
+    <h2 style="color: #0ff; margin-top: 0;">Lasso Sprite Cutter</h2>
+
+    <div class="controls" style="margin-bottom: 15px; background: rgba(0,100,0,0.3); padding: 10px; border-radius: 8px;">
+        <strong>Load Sprite Sheet:</strong>
+        <input type="file" id="fileInput" accept="image/*" style="margin-left: 10px;">
+        <span id="loadStatus" style="margin-left: 10px; color: #888;"></span>
+    </div>
+
+    <div id="instructions">
+        <strong>Instructions:</strong>
+        <ol>
+            <li><strong>Lasso Tool:</strong> Click and drag to draw a freeform selection around a sprite</li>
+            <li><strong>Rectangle Tool:</strong> Click and drag to make a rectangular selection</li>
+            <li><strong>Circle Tool:</strong> Click center then drag to set radius for circular selection</li>
+            <li><strong>Cut sprite:</strong> Click "Cut Selection" to extract the sprite (lasso/circle crops to bounds with transparency)</li>
+            <li><strong>Export:</strong> Get sprite coordinates and download individual PNGs</li>
+        </ol>
+    </div>
+
+    <div id="main-container">
+        <div id="source-panel" class="panel">
+            <h3>Source Sprite Sheet</h3>
+
+            <div class="controls">
+                <strong>Tool:</strong>
+                <button class="tool-btn active" id="lassoBtn" onclick="setTool('lasso')">Lasso</button>
+                <button class="tool-btn" id="rectBtn" onclick="setTool('rect')">Rectangle</button>
+                <button class="tool-btn" id="circleBtn" onclick="setTool('circle')">Circle</button>
+                <span id="lasso-info">Draw around sprite to select</span>
+            </div>
+
+            <div class="controls">
+                <label>Zoom:
+                    <button onclick="setSourceZoom(1)">1x</button>
+                    <button onclick="setSourceZoom(2)">2x</button>
+                    <button onclick="setSourceZoom(3)" class="active" id="zoom3">3x</button>
+                    <button onclick="setSourceZoom(4)">4x</button>
+                    <button onclick="setSourceZoom(6)">6x</button>
+                </label>
+            </div>
+
+            <div id="source-container">
+                <img id="source-img" src="/assets/players/Player-sharedassets0.assets-55.png" style="display:block;">
+                <canvas id="overlay-canvas"></canvas>
+            </div>
+
+            <div class="section-title">Selection</div>
+            <div class="controls">
+                <label>Name: <input type="text" id="spriteName" value="asteroid" placeholder="Sprite name"></label>
+                <button class="success" onclick="cutSelection()">Cut Selection</button>
+                <button onclick="clearSelection()">Clear Selection</button>
+            </div>
+
+            <div class="section-title">Cut Sprites (<span id="spriteCount">0</span>)</div>
+            <div id="sprite-list">
+                <em>No sprites cut yet</em>
+            </div>
+            <div class="controls" style="margin-top:10px;">
+                <button class="danger" onclick="deleteSelectedSprite()">Delete Selected</button>
+                <button class="warning" onclick="clearAllSprites()">Clear All</button>
+            </div>
+        </div>
+
+        <div id="preview-panel" class="panel">
+            <h3>Preview</h3>
+            <div class="controls">
+                <label>Preview BG:
+                    <button onclick="setPreviewBg('#1a1a2e')">Dark</button>
+                    <button onclick="setPreviewBg('#333')">Gray</button>
+                    <button onclick="setPreviewBg('#fff')">White</button>
+                    <button onclick="setPreviewBg('checker')" class="active">Checker</button>
+                </label>
+            </div>
+
+            <canvas id="preview-canvas" width="600" height="600"></canvas>
+
+            <div class="section-title">Export</div>
+            <div class="controls">
+                <button class="success" onclick="exportJSON()">Export JSON</button>
+                <button onclick="copyToClipboard()">Copy to Clipboard</button>
+                <button onclick="downloadSelected()">Download Selected PNG</button>
+                <button onclick="downloadAll()">Download All PNGs</button>
+            </div>
+            <div id="output">// Cut sprites will appear here</div>
+        </div>
+    </div>
+
+    <div id="coords">X: <span id="posX">0</span>, Y: <span id="posY">0</span></div>
+
+    <script>
+        // Elements
+        const sourceImg = document.getElementById('source-img');
+        const overlayCanvas = document.getElementById('overlay-canvas');
+        const overlayCtx = overlayCanvas.getContext('2d');
+        const previewCanvas = document.getElementById('preview-canvas');
+        const previewCtx = previewCanvas.getContext('2d');
+
+        // State
+        let sourceZoom = 3;
+        let currentTool = 'lasso';
+        let previewBg = 'checker';
+
+        // Selection state
+        let isDrawing = false;
+        let lassoPoints = [];
+        let rectStart = null;
+        let rectEnd = null;
+        let circleCenter = null;
+        let circleRadius = 0;
+
+        // Cut sprites
+        let cutSprites = [];
+        let selectedSpriteIndex = -1;
+
+        // Set up image and overlay
+        function setupSource() {
+            sourceImg.style.width = (sourceImg.naturalWidth * sourceZoom) + 'px';
+            sourceImg.style.height = (sourceImg.naturalHeight * sourceZoom) + 'px';
+            overlayCanvas.width = sourceImg.naturalWidth * sourceZoom;
+            overlayCanvas.height = sourceImg.naturalHeight * sourceZoom;
+            document.getElementById('loadStatus').textContent = `Loaded: ${sourceImg.naturalWidth}x${sourceImg.naturalHeight}`;
+            document.getElementById('loadStatus').style.color = '#0f0';
+        }
+
+        sourceImg.onload = setupSource;
+        if (sourceImg.complete && sourceImg.naturalWidth) setupSource();
+
+        // File input handler
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    sourceImg.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        function setSourceZoom(z) {
+            sourceZoom = z;
+            document.querySelectorAll('#source-panel .controls button').forEach(b => {
+                if (b.textContent.match(/^\d+x$/)) b.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            setupSource();
+            drawOverlay();
+        }
+
+        function setTool(tool) {
+            currentTool = tool;
+            document.getElementById('lassoBtn').classList.toggle('active', tool === 'lasso');
+            document.getElementById('rectBtn').classList.toggle('active', tool === 'rect');
+            document.getElementById('circleBtn').classList.toggle('active', tool === 'circle');
+            const hints = {
+                'lasso': 'Draw around sprite to select',
+                'rect': 'Click and drag to select rectangle',
+                'circle': 'Click center, drag to set radius'
+            };
+            document.getElementById('lasso-info').textContent = hints[tool] || '';
+            clearSelection();
+        }
+
+        function drawOverlay() {
+            overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+            if (currentTool === 'lasso' && lassoPoints.length > 1) {
+                // Draw lasso path
+                overlayCtx.beginPath();
+                overlayCtx.moveTo(lassoPoints[0].x * sourceZoom, lassoPoints[0].y * sourceZoom);
+                for (let i = 1; i < lassoPoints.length; i++) {
+                    overlayCtx.lineTo(lassoPoints[i].x * sourceZoom, lassoPoints[i].y * sourceZoom);
+                }
+                if (!isDrawing) {
+                    overlayCtx.closePath();
+                }
+                overlayCtx.strokeStyle = '#00ff00';
+                overlayCtx.lineWidth = 2;
+                overlayCtx.stroke();
+
+                // Fill with semi-transparent
+                if (!isDrawing && lassoPoints.length > 2) {
+                    overlayCtx.fillStyle = 'rgba(0, 255, 0, 0.2)';
+                    overlayCtx.fill();
+                }
+            } else if (currentTool === 'rect' && rectStart && rectEnd) {
+                const x = Math.min(rectStart.x, rectEnd.x) * sourceZoom;
+                const y = Math.min(rectStart.y, rectEnd.y) * sourceZoom;
+                const w = Math.abs(rectEnd.x - rectStart.x) * sourceZoom;
+                const h = Math.abs(rectEnd.y - rectStart.y) * sourceZoom;
+
+                overlayCtx.strokeStyle = '#00ff00';
+                overlayCtx.lineWidth = 2;
+                overlayCtx.strokeRect(x, y, w, h);
+                overlayCtx.fillStyle = 'rgba(0, 255, 0, 0.2)';
+                overlayCtx.fillRect(x, y, w, h);
+            } else if (currentTool === 'circle' && circleCenter && circleRadius > 0) {
+                overlayCtx.beginPath();
+                overlayCtx.arc(
+                    circleCenter.x * sourceZoom,
+                    circleCenter.y * sourceZoom,
+                    circleRadius * sourceZoom,
+                    0, Math.PI * 2
+                );
+                overlayCtx.strokeStyle = '#00ff00';
+                overlayCtx.lineWidth = 2;
+                overlayCtx.stroke();
+                overlayCtx.fillStyle = 'rgba(0, 255, 0, 0.2)';
+                overlayCtx.fill();
+            }
+        }
+
+        // Mouse events on the overlay (which sits on top of the img)
+        overlayCanvas.style.pointerEvents = 'auto';
+
+        overlayCanvas.addEventListener('mousedown', (e) => {
+            const rect = overlayCanvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / sourceZoom);
+            const y = Math.floor((e.clientY - rect.top) / sourceZoom);
+
+            isDrawing = true;
+
+            if (currentTool === 'lasso') {
+                lassoPoints = [{ x, y }];
+            } else if (currentTool === 'rect') {
+                rectStart = { x, y };
+                rectEnd = { x, y };
+            } else if (currentTool === 'circle') {
+                circleCenter = { x, y };
+                circleRadius = 0;
+            }
+            drawOverlay();
+        });
+
+        overlayCanvas.addEventListener('mousemove', (e) => {
+            const rect = overlayCanvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / sourceZoom);
+            const y = Math.floor((e.clientY - rect.top) / sourceZoom);
+
+            document.getElementById('posX').textContent = x;
+            document.getElementById('posY').textContent = y;
+
+            if (!isDrawing) return;
+
+            if (currentTool === 'lasso') {
+                // Add point if it's different from last
+                const last = lassoPoints[lassoPoints.length - 1];
+                if (last.x !== x || last.y !== y) {
+                    lassoPoints.push({ x, y });
+                }
+            } else if (currentTool === 'rect') {
+                rectEnd = { x, y };
+            } else if (currentTool === 'circle' && circleCenter) {
+                // Calculate radius from center to current position
+                const dx = x - circleCenter.x;
+                const dy = y - circleCenter.y;
+                circleRadius = Math.sqrt(dx * dx + dy * dy);
+            }
+            drawOverlay();
+        });
+
+        overlayCanvas.addEventListener('mouseup', () => {
+            isDrawing = false;
+            drawOverlay();
+        });
+
+        overlayCanvas.addEventListener('mouseleave', () => {
+            if (isDrawing) {
+                isDrawing = false;
+                drawOverlay();
+            }
+        });
+
+        function clearSelection() {
+            lassoPoints = [];
+            rectStart = null;
+            rectEnd = null;
+            circleCenter = null;
+            circleRadius = 0;
+            drawOverlay();
+        }
+
+        function cutSelection() {
+            let bounds, mask = null, isCircle = false;
+
+            if (currentTool === 'lasso' && lassoPoints.length > 2) {
+                // Calculate bounding box of lasso
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                for (const p of lassoPoints) {
+                    minX = Math.min(minX, p.x);
+                    minY = Math.min(minY, p.y);
+                    maxX = Math.max(maxX, p.x);
+                    maxY = Math.max(maxY, p.y);
+                }
+                bounds = { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+
+                // Create mask from lasso points
+                mask = lassoPoints.map(p => ({ x: p.x - minX, y: p.y - minY }));
+            } else if (currentTool === 'rect' && rectStart && rectEnd) {
+                const x = Math.min(rectStart.x, rectEnd.x);
+                const y = Math.min(rectStart.y, rectEnd.y);
+                const w = Math.abs(rectEnd.x - rectStart.x) + 1;
+                const h = Math.abs(rectEnd.y - rectStart.y) + 1;
+                bounds = { x, y, w, h };
+            } else if (currentTool === 'circle' && circleCenter && circleRadius > 0) {
+                // Calculate bounding box of circle
+                const r = Math.ceil(circleRadius);
+                const x = Math.floor(circleCenter.x - r);
+                const y = Math.floor(circleCenter.y - r);
+                const diameter = r * 2 + 1;
+                bounds = { x, y, w: diameter, h: diameter };
+                isCircle = true;
+            } else {
+                alert('Please make a selection first!');
+                return;
+            }
+
+            if (bounds.w < 1 || bounds.h < 1) {
+                alert('Selection too small!');
+                return;
+            }
+
+            // Create canvas for the cut sprite
+            const cutCanvas = document.createElement('canvas');
+            cutCanvas.width = bounds.w;
+            cutCanvas.height = bounds.h;
+            const cutCtx = cutCanvas.getContext('2d');
+
+            // Draw the source region
+            cutCtx.drawImage(
+                sourceImg,
+                bounds.x, bounds.y, bounds.w, bounds.h,
+                0, 0, bounds.w, bounds.h
+            );
+
+            // Apply lasso mask if needed
+            if (mask && mask.length > 2) {
+                // Get image data
+                const imageData = cutCtx.getImageData(0, 0, bounds.w, bounds.h);
+                const data = imageData.data;
+
+                // Create path for point-in-polygon test
+                for (let py = 0; py < bounds.h; py++) {
+                    for (let px = 0; px < bounds.w; px++) {
+                        if (!pointInPolygon(px, py, mask)) {
+                            // Set pixel to transparent
+                            const idx = (py * bounds.w + px) * 4;
+                            data[idx + 3] = 0; // Alpha = 0
+                        }
+                    }
+                }
+                cutCtx.putImageData(imageData, 0, 0);
+            }
+
+            // Apply circle mask if needed
+            if (isCircle) {
+                const imageData = cutCtx.getImageData(0, 0, bounds.w, bounds.h);
+                const data = imageData.data;
+                const centerX = bounds.w / 2;
+                const centerY = bounds.h / 2;
+                const r = circleRadius;
+
+                for (let py = 0; py < bounds.h; py++) {
+                    for (let px = 0; px < bounds.w; px++) {
+                        const dx = px - centerX;
+                        const dy = py - centerY;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist > r) {
+                            // Set pixel to transparent
+                            const idx = (py * bounds.w + px) * 4;
+                            data[idx + 3] = 0; // Alpha = 0
+                        }
+                    }
+                }
+                cutCtx.putImageData(imageData, 0, 0);
+            }
+
+            // Get sprite name
+            const nameInput = document.getElementById('spriteName');
+            const name = nameInput.value || `sprite_${cutSprites.length}`;
+
+            // Calculate tight bounds (actual visible pixels) for lasso/circle cuts
+            let tightBounds = bounds;
+            if ((mask && mask.length > 2) || isCircle) {
+                const imageData = cutCtx.getImageData(0, 0, bounds.w, bounds.h);
+                const data = imageData.data;
+                let minX = bounds.w, minY = bounds.h, maxX = 0, maxY = 0;
+
+                for (let py = 0; py < bounds.h; py++) {
+                    for (let px = 0; px < bounds.w; px++) {
+                        const idx = (py * bounds.w + px) * 4;
+                        if (data[idx + 3] > 0) { // If pixel is visible
+                            minX = Math.min(minX, px);
+                            minY = Math.min(minY, py);
+                            maxX = Math.max(maxX, px);
+                            maxY = Math.max(maxY, py);
+                        }
+                    }
+                }
+
+                if (maxX >= minX && maxY >= minY) {
+                    tightBounds = {
+                        x: bounds.x + minX,
+                        y: bounds.y + minY,
+                        w: maxX - minX + 1,
+                        h: maxY - minY + 1
+                    };
+                }
+            }
+
+            // Store the cut sprite
+            cutSprites.push({
+                name: name,
+                canvas: cutCanvas,
+                bounds: bounds,
+                tightBounds: tightBounds,
+                mask: mask,
+                isCircle: isCircle,
+                circleCenter: isCircle ? { x: circleCenter.x, y: circleCenter.y } : null,
+                circleRadius: isCircle ? circleRadius : null,
+                dataUrl: cutCanvas.toDataURL('image/png')
+            });
+
+            // Increment sprite name number
+            const match = name.match(/^(.+?)(\d+)?$/);
+            if (match) {
+                const base = match[1].replace(/\d+$/, '');
+                const num = parseInt(match[2] || '0') + 1;
+                nameInput.value = base + num;
+            }
+
+            updateSpriteList();
+            clearSelection();
+            selectSprite(cutSprites.length - 1);
+        }
+
+        // Point in polygon test (ray casting)
+        function pointInPolygon(x, y, polygon) {
+            let inside = false;
+            for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+                const xi = polygon[i].x, yi = polygon[i].y;
+                const xj = polygon[j].x, yj = polygon[j].y;
+
+                if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+                    inside = !inside;
+                }
+            }
+            return inside;
+        }
+
+        function updateSpriteList() {
+            const list = document.getElementById('sprite-list');
+            document.getElementById('spriteCount').textContent = cutSprites.length;
+
+            if (cutSprites.length === 0) {
+                list.innerHTML = '<em>No sprites cut yet</em>';
+                return;
+            }
+
+            list.innerHTML = cutSprites.map((sprite, i) => `
+                <div class="sprite-item ${i === selectedSpriteIndex ? 'selected' : ''}" onclick="selectSprite(${i})">
+                    <canvas width="50" height="50" id="thumb-${i}"></canvas>
+                    <input type="text" value="${sprite.name}" onchange="renameSprite(${i}, this.value)" onclick="event.stopPropagation()">
+                    <span style="color:#888;font-size:11px;">${sprite.bounds.w}x${sprite.bounds.h}</span>
+                    <button class="danger" onclick="event.stopPropagation(); deleteSprite(${i})" style="padding:4px 8px;">X</button>
+                </div>
+            `).join('');
+
+            // Draw thumbnails with checker background
+            cutSprites.forEach((sprite, i) => {
+                const thumb = document.getElementById(`thumb-${i}`);
+                if (thumb) {
+                    const ctx = thumb.getContext('2d');
+
+                    // Draw checkerboard background
+                    const size = 5;
+                    for (let y = 0; y < 50; y += size) {
+                        for (let x = 0; x < 50; x += size) {
+                            ctx.fillStyle = ((x / size + y / size) % 2 === 0) ? '#666' : '#444';
+                            ctx.fillRect(x, y, size, size);
+                        }
+                    }
+
+                    // Scale to fit
+                    const scale = Math.min(50 / sprite.canvas.width, 50 / sprite.canvas.height);
+                    const w = sprite.canvas.width * scale;
+                    const h = sprite.canvas.height * scale;
+                    ctx.drawImage(sprite.canvas, (50 - w) / 2, (50 - h) / 2, w, h);
+                }
+            });
+
+            updateOutput();
+        }
+
+        function selectSprite(index) {
+            selectedSpriteIndex = index;
+            updateSpriteList();
+            drawPreview();
+        }
+
+        function renameSprite(index, newName) {
+            cutSprites[index].name = newName;
+            updateOutput();
+        }
+
+        function deleteSprite(index) {
+            cutSprites.splice(index, 1);
+            if (selectedSpriteIndex >= cutSprites.length) {
+                selectedSpriteIndex = cutSprites.length - 1;
+            }
+            updateSpriteList();
+            drawPreview();
+        }
+
+        function deleteSelectedSprite() {
+            if (selectedSpriteIndex >= 0) {
+                deleteSprite(selectedSpriteIndex);
+            }
+        }
+
+        function clearAllSprites() {
+            if (cutSprites.length > 0 && confirm('Clear all cut sprites?')) {
+                cutSprites = [];
+                selectedSpriteIndex = -1;
+                updateSpriteList();
+                drawPreview();
+            }
+        }
+
+        function setPreviewBg(bg) {
+            previewBg = bg;
+            document.querySelectorAll('#preview-panel .controls button').forEach(b => {
+                if (['Dark', 'Gray', 'White', 'Checker'].includes(b.textContent)) {
+                    b.classList.remove('active');
+                }
+            });
+            event.target.classList.add('active');
+            drawPreview();
+        }
+
+        function drawPreview() {
+            previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+
+            // Draw background
+            if (previewBg === 'checker') {
+                // Checkerboard pattern
+                const size = 10;
+                for (let y = 0; y < previewCanvas.height; y += size) {
+                    for (let x = 0; x < previewCanvas.width; x += size) {
+                        previewCtx.fillStyle = ((x / size + y / size) % 2 === 0) ? '#555' : '#444';
+                        previewCtx.fillRect(x, y, size, size);
+                    }
+                }
+            } else {
+                previewCtx.fillStyle = previewBg;
+                previewCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
+            }
+
+            // Draw selected sprite centered
+            if (selectedSpriteIndex >= 0 && cutSprites[selectedSpriteIndex]) {
+                const sprite = cutSprites[selectedSpriteIndex];
+
+                // Scale up if small, scale down if too big
+                let scale = 1;
+                const maxDim = Math.max(sprite.canvas.width, sprite.canvas.height);
+                if (maxDim < 100) {
+                    scale = Math.floor(200 / maxDim);
+                } else if (maxDim > 350) {
+                    scale = 350 / maxDim;
+                }
+
+                const w = sprite.canvas.width * scale;
+                const h = sprite.canvas.height * scale;
+                const x = (previewCanvas.width - w) / 2;
+                const y = (previewCanvas.height - h) / 2 - 20;
+
+                previewCtx.imageSmoothingEnabled = false;
+                previewCtx.drawImage(sprite.canvas, x, y, w, h);
+
+                // Draw bounds info
+                previewCtx.fillStyle = '#fff';
+                previewCtx.font = '14px Arial';
+                previewCtx.textAlign = 'center';
+                previewCtx.fillText(
+                    `${sprite.name} - ${sprite.canvas.width}x${sprite.canvas.height} @ (${sprite.bounds.x}, ${sprite.bounds.y})`,
+                    previewCanvas.width / 2,
+                    previewCanvas.height - 15
+                );
+            }
+        }
+
+        function updateOutput() {
+            if (cutSprites.length === 0) {
+                document.getElementById('output').textContent = '// No sprites cut yet';
+                return;
+            }
+
+            let json = {
+                sprites: cutSprites.map(s => {
+                    const result = {
+                        name: s.name,
+                        x: s.bounds.x,
+                        y: s.bounds.y,
+                        w: s.bounds.w,
+                        h: s.bounds.h
+                    };
+                    // For lasso cuts, include mask polygon and tight bounds
+                    if (s.mask && s.mask.length > 2) {
+                        result.hasLassoMask = true;
+                        result.mask = s.mask; // Array of {x, y} points relative to bounds
+                        if (s.tightBounds) {
+                            result.tightX = s.tightBounds.x;
+                            result.tightY = s.tightBounds.y;
+                            result.tightW = s.tightBounds.w;
+                            result.tightH = s.tightBounds.h;
+                        }
+                    }
+                    // For circle cuts, show circle info
+                    if (s.isCircle && s.circleCenter) {
+                        result.isCircle = true;
+                        result.centerX = s.circleCenter.x;
+                        result.centerY = s.circleCenter.y;
+                        result.radius = Math.round(s.circleRadius);
+                    }
+                    return result;
+                })
+            };
+
+            document.getElementById('output').textContent = JSON.stringify(json, null, 2);
+        }
+
+        function exportJSON() {
+            const json = {
+                sprites: cutSprites.map(s => {
+                    const result = {
+                        name: s.name,
+                        x: s.bounds.x,
+                        y: s.bounds.y,
+                        w: s.bounds.w,
+                        h: s.bounds.h
+                    };
+                    // For lasso cuts, include mask polygon points
+                    if (s.mask && s.mask.length > 2) {
+                        result.hasLassoMask = true;
+                        result.mask = s.mask; // Array of {x, y} points relative to bounds
+                        if (s.tightBounds) {
+                            result.tightX = s.tightBounds.x;
+                            result.tightY = s.tightBounds.y;
+                            result.tightW = s.tightBounds.w;
+                            result.tightH = s.tightBounds.h;
+                        }
+                    }
+                    // For circle cuts, include circle info
+                    if (s.isCircle && s.circleCenter) {
+                        result.isCircle = true;
+                        result.centerX = s.circleCenter.x;
+                        result.centerY = s.circleCenter.y;
+                        result.radius = Math.round(s.circleRadius);
+                    }
+                    return result;
+                })
+            };
+
+            const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'sprites.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function copyToClipboard() {
+            const text = document.getElementById('output').textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Copied to clipboard!');
+            });
+        }
+
+        function downloadSelected() {
+            if (selectedSpriteIndex < 0) {
+                alert('No sprite selected!');
+                return;
+            }
+
+            const sprite = cutSprites[selectedSpriteIndex];
+            const a = document.createElement('a');
+            a.href = sprite.dataUrl;
+            a.download = `${sprite.name}.png`;
+            a.click();
+        }
+
+        function downloadAll() {
+            if (cutSprites.length === 0) {
+                alert('No sprites to download!');
+                return;
+            }
+
+            cutSprites.forEach((sprite, i) => {
+                setTimeout(() => {
+                    const a = document.createElement('a');
+                    a.href = sprite.dataUrl;
+                    a.download = `${sprite.name}.png`;
+                    a.click();
+                }, i * 100);
+            });
+        }
+
+        // Initial draw
+        drawPreview();
+    </script>
+</body>
+</html>

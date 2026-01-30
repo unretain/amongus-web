@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Vent Sprite Debug Tool</title>
+    <style>
+        body {
+            background: #1a1a2e;
+            color: white;
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #container {
+            position: relative;
+            display: inline-block;
+        }
+        #sprite {
+            border: 2px solid #444;
+            cursor: crosshair;
+        }
+        #selection {
+            position: absolute;
+            border: 2px solid #00ff00;
+            background: rgba(0, 255, 0, 0.2);
+            pointer-events: none;
+        }
+        #info {
+            margin-top: 20px;
+            padding: 15px;
+            background: #2a2a4a;
+            border-radius: 8px;
+        }
+        #preview {
+            margin-top: 20px;
+            padding: 15px;
+            background: #2a2a4a;
+            border-radius: 8px;
+        }
+        #previewCanvas {
+            border: 2px solid #444;
+            background: #333;
+        }
+        .coords {
+            font-family: monospace;
+            font-size: 16px;
+            color: #00ff00;
+        }
+        h1 { color: #ff6b6b; }
+        h3 { color: #4ecdc4; margin-top: 0; }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #4ecdc4;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover { background: #45b7aa; }
+        button.active { background: #ff6b6b; }
+        #controls {
+            margin-bottom: 10px;
+        }
+        #imageSize {
+            color: #888;
+            margin-left: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Vent Sprite Debug Tool</h1>
+    <p>Click and drag to select a region. The coordinates will be shown below.</p>
+
+    <div id="controls">
+        <strong>Zoom:</strong>
+        <button onclick="setZoom(1)">1x</button>
+        <button onclick="setZoom(2)" class="active" id="zoom2">2x</button>
+        <button onclick="setZoom(3)">3x</button>
+        <button onclick="setZoom(4)">4x</button>
+        <span style="margin-left: 20px;">Current zoom: <span id="zoomLevel">2x</span></span>
+        <span id="imageSize"></span>
+    </div>
+
+    <div id="container">
+        <canvas id="sprite"></canvas>
+        <div id="selection" style="display: none;"></div>
+    </div>
+
+    <div id="info">
+        <h3>Selection Coordinates</h3>
+        <p>Start: <span id="startCoords" class="coords">-</span></p>
+        <p>End: <span id="endCoords" class="coords">-</span></p>
+        <p><strong>Source Rect (for drawImage):</strong></p>
+        <p class="coords">srcX: <span id="srcX">-</span>, srcY: <span id="srcY">-</span>, srcW: <span id="srcW">-</span>, srcH: <span id="srcH">-</span></p>
+        <p><strong>Copy-paste code:</strong></p>
+        <pre id="codeSnippet" style="background: #1a1a2e; padding: 10px; border-radius: 5px; overflow-x: auto;">Select a region to see code</pre>
+    </div>
+
+    <div id="preview">
+        <h3>Selection Preview</h3>
+        <canvas id="previewCanvas" width="200" height="200"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('sprite');
+        const ctx = canvas.getContext('2d');
+        const selection = document.getElementById('selection');
+        const container = document.getElementById('container');
+        const previewCanvas = document.getElementById('previewCanvas');
+        const previewCtx = previewCanvas.getContext('2d');
+
+        let img = new Image();
+        let zoom = 2;
+        let isSelecting = false;
+        let startX, startY, endX, endY;
+
+        img.onload = function() {
+            document.getElementById('imageSize').textContent = `Size: ${img.width} x ${img.height}`;
+            canvas.width = img.width * zoom;
+            canvas.height = img.height * zoom;
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            drawGrid();
+        };
+        img.src = '/assets/main-menu.png';
+
+        function setZoom(z) {
+            zoom = z;
+            document.getElementById('zoomLevel').textContent = z + 'x';
+            document.querySelectorAll('#controls button').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+            canvas.width = img.width * zoom;
+            canvas.height = img.height * zoom;
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            drawGrid();
+        }
+
+        function drawGrid() {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.lineWidth = 1;
+
+            for (let x = 0; x < img.width; x += 50) {
+                ctx.beginPath();
+                ctx.moveTo(x * zoom, 0);
+                ctx.lineTo(x * zoom, canvas.height);
+                ctx.stroke();
+            }
+            for (let y = 0; y < img.height; y += 50) {
+                ctx.beginPath();
+                ctx.moveTo(0, y * zoom);
+                ctx.lineTo(canvas.width, y * zoom);
+                ctx.stroke();
+            }
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            isSelecting = true;
+            const rect = canvas.getBoundingClientRect();
+            startX = Math.floor((e.clientX - rect.left) / zoom);
+            startY = Math.floor((e.clientY - rect.top) / zoom);
+            document.getElementById('startCoords').textContent = `(${startX}, ${startY})`;
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / zoom);
+            const y = Math.floor((e.clientY - rect.top) / zoom);
+
+            if (isSelecting) {
+                endX = x;
+                endY = y;
+
+                const selX = Math.min(startX, endX) * zoom;
+                const selY = Math.min(startY, endY) * zoom;
+                const selW = Math.abs(endX - startX) * zoom;
+                const selH = Math.abs(endY - startY) * zoom;
+
+                selection.style.display = 'block';
+                selection.style.left = selX + 'px';
+                selection.style.top = selY + 'px';
+                selection.style.width = selW + 'px';
+                selection.style.height = selH + 'px';
+
+                updateInfo();
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            isSelecting = false;
+            updatePreview();
+        });
+
+        function updateInfo() {
+            const x = Math.min(startX, endX);
+            const y = Math.min(startY, endY);
+            const w = Math.abs(endX - startX);
+            const h = Math.abs(endY - startY);
+
+            document.getElementById('endCoords').textContent = `(${endX}, ${endY})`;
+            document.getElementById('srcX').textContent = x;
+            document.getElementById('srcY').textContent = y;
+            document.getElementById('srcW').textContent = w;
+            document.getElementById('srcH').textContent = h;
+
+            document.getElementById('codeSnippet').textContent =
+                `// Vent sprite\nconst srcX = ${x};\nconst srcY = ${y};\nconst srcW = ${w};\nconst srcH = ${h};\nctx.drawImage(ventTexture, srcX, srcY, srcW, srcH, drawX, drawY, ${w}, ${h});`;
+        }
+
+        function updatePreview() {
+            const x = Math.min(startX, endX);
+            const y = Math.min(startY, endY);
+            const w = Math.abs(endX - startX);
+            const h = Math.abs(endY - startY);
+
+            if (w > 0 && h > 0) {
+                previewCanvas.width = w * 2;
+                previewCanvas.height = h * 2;
+                previewCtx.imageSmoothingEnabled = false;
+                previewCtx.drawImage(img, x, y, w, h, 0, 0, w * 2, h * 2);
+            }
+        }
+    </script>
+</body>
+</html>

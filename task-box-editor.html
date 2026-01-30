@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Box Editor</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #sidebar {
+            width: 320px;
+            background: #16213e;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            overflow-y: auto;
+        }
+        #container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        h2 { color: #ffcc00; margin-bottom: 10px; font-size: 18px; }
+        h3 { color: #aaa; margin: 10px 0 5px; font-size: 14px; }
+        button {
+            padding: 8px 12px;
+            background: #0f3460;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        button:hover { background: #1a5f7a; }
+        button.active { background: #e94560; }
+        select, input {
+            padding: 6px;
+            background: #0f3460;
+            color: #fff;
+            border: 1px solid #1a5f7a;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        select { width: 100%; }
+        .tool-row {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+        .box-list {
+            max-height: 300px;
+            overflow-y: auto;
+            background: #0a0a15;
+            border-radius: 4px;
+            padding: 5px;
+        }
+        .box-item {
+            padding: 6px 8px;
+            margin: 2px 0;
+            background: #1a1a2e;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .box-item:hover { background: #2a2a4e; }
+        .box-item.selected { background: #e94560; }
+        .box-item .delete-btn {
+            background: #ff4444;
+            padding: 2px 6px;
+            font-size: 10px;
+        }
+        .instructions {
+            font-size: 11px;
+            color: #888;
+            line-height: 1.4;
+        }
+        #output {
+            width: 100%;
+            height: 150px;
+            background: #0a0a15;
+            color: #0f0;
+            border: 1px solid #1a5f7a;
+            font-family: monospace;
+            font-size: 11px;
+            resize: vertical;
+        }
+        .color-preview {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 1px solid #fff;
+            vertical-align: middle;
+            margin-left: 5px;
+        }
+        label { font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <h2>Task Box Editor</h2>
+
+        <div class="instructions">
+            <b>Controls:</b><br>
+            - Click + drag to draw box<br>
+            - Right-click drag to pan<br>
+            - Scroll to zoom<br>
+            - Select task type before drawing
+        </div>
+
+        <h3>Current Task</h3>
+        <select id="taskSelect">
+            <optgroup label="Single Tasks">
+                <option value="Fix Wiring|Cafeteria">Fix Wiring - Cafeteria</option>
+                <option value="Fix Wiring|Admin">Fix Wiring - Admin</option>
+                <option value="Fix Wiring|Electrical">Fix Wiring - Electrical</option>
+                <option value="MedScan|MedBay">MedScan - MedBay</option>
+                <option value="Stabilize Steering|Navigation">Stabilize Steering - Navigation</option>
+                <option value="Clear Asteroids|Weapons">Clear Asteroids - Weapons</option>
+                <option value="Swipe Card|Admin">Swipe Card - Admin</option>
+                <option value="Unlock Manifolds|Reactor">Unlock Manifolds - Reactor</option>
+                <option value="Start Reactor|Reactor">Start Reactor - Reactor</option>
+                <option value="Prime Shields|Shields">Prime Shields - Shields</option>
+                <option value="Align Engine|Upper Engine">Align Engine - Upper Engine</option>
+                <option value="Align Engine|Lower Engine">Align Engine - Lower Engine</option>
+            </optgroup>
+            <optgroup label="Multi-Step Tasks">
+                <option value="Divert Power|Electrical">Divert Power - Electrical (source panel)</option>
+                <option value="Accept Power|Weapons">Accept Power - Weapons</option>
+                <option value="Accept Power|O2">Accept Power - O2</option>
+                <option value="Accept Power|Navigation">Accept Power - Navigation</option>
+                <option value="Download Data|Cafeteria">Download Data - Cafeteria</option>
+                <option value="Download Data|Electrical">Download Data - Electrical</option>
+                <option value="Upload Data|Admin">Upload Data - Admin</option>
+            </optgroup>
+            <optgroup label="Always Visible (White)">
+                <option value="ALWAYS|white">Always Visible Box (white)</option>
+            </optgroup>
+        </select>
+
+        <h3>Box Color</h3>
+        <div class="tool-row">
+            <label>Stroke: <input type="color" id="strokeColor" value="#ffcc00"></label>
+            <span class="color-preview" id="colorPreview" style="background:#ffcc00"></span>
+        </div>
+
+        <h3>Actions</h3>
+        <div class="tool-row">
+            <button id="clearAll">Clear All</button>
+            <button id="exportJson">Export JSON</button>
+            <button id="copyCode">Copy Code</button>
+        </div>
+
+        <h3>Task Boxes ({count})</h3>
+        <div class="box-list" id="boxList"></div>
+
+        <h3>Output</h3>
+        <textarea id="output" readonly></textarea>
+    </div>
+
+    <div id="container">
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('container');
+        const taskSelect = document.getElementById('taskSelect');
+        const strokeColorInput = document.getElementById('strokeColor');
+        const colorPreview = document.getElementById('colorPreview');
+        const boxListEl = document.getElementById('boxList');
+        const outputEl = document.getElementById('output');
+
+        const mapImage = new Image();
+        let boxes = [];
+        let selectedBox = null;
+
+        // Pan and zoom
+        let scale = 0.15;
+        let panX = 0, panY = 0;
+        let isPanning = false;
+        let isDrawing = false;
+        let startX, startY, lastX, lastY;
+        let currentBox = null;
+
+        // Update color preview when task changes
+        taskSelect.addEventListener('change', () => {
+            const val = taskSelect.value;
+            if (val.includes('ALWAYS')) {
+                strokeColorInput.value = '#ffffff';
+            } else {
+                strokeColorInput.value = '#ffcc00';
+            }
+            colorPreview.style.background = strokeColorInput.value;
+        });
+
+        strokeColorInput.addEventListener('input', () => {
+            colorPreview.style.background = strokeColorInput.value;
+        });
+
+        mapImage.onload = () => {
+            resizeCanvas();
+            render();
+        };
+        mapImage.src = '/assets/skeld-full.webp';
+
+        function resizeCanvas() {
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            render();
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        function render() {
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.save();
+            ctx.translate(panX, panY);
+            ctx.scale(scale, scale);
+
+            // Draw map
+            if (mapImage.complete) {
+                ctx.drawImage(mapImage, 0, 0);
+            }
+
+            // Draw existing boxes
+            for (const box of boxes) {
+                ctx.strokeStyle = box.color;
+                ctx.lineWidth = 3 / scale;
+                ctx.fillStyle = box.color === '#ffffff' ? 'rgba(255,255,255,0.15)' : 'rgba(255,204,0,0.15)';
+                ctx.fillRect(box.x, box.y, box.w, box.h);
+                ctx.strokeRect(box.x, box.y, box.w, box.h);
+
+                // Draw label
+                ctx.fillStyle = '#fff';
+                ctx.font = `${14 / scale}px Arial`;
+                const label = box.taskName.length > 20 ? box.taskName.substring(0, 20) + '...' : box.taskName;
+                ctx.fillText(label, box.x + 2, box.y - 5 / scale);
+            }
+
+            // Draw current box being drawn
+            if (currentBox) {
+                ctx.strokeStyle = strokeColorInput.value;
+                ctx.lineWidth = 3 / scale;
+                ctx.fillStyle = strokeColorInput.value === '#ffffff' ? 'rgba(255,255,255,0.15)' : 'rgba(255,204,0,0.15)';
+                ctx.fillRect(currentBox.x, currentBox.y, currentBox.w, currentBox.h);
+                ctx.strokeRect(currentBox.x, currentBox.y, currentBox.w, currentBox.h);
+            }
+
+            ctx.restore();
+
+            // Draw instructions
+            ctx.fillStyle = '#fff';
+            ctx.font = '12px Arial';
+            ctx.fillText(`Scale: ${(scale * 100).toFixed(0)}% | Boxes: ${boxes.length}`, 10, 20);
+        }
+
+        function screenToMap(sx, sy) {
+            return {
+                x: (sx - panX) / scale,
+                y: (sy - panY) / scale
+            };
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.button === 2) {
+                // Right click - pan
+                isPanning = true;
+                lastX = e.clientX;
+                lastY = e.clientY;
+            } else if (e.button === 0) {
+                // Left click - draw
+                isDrawing = true;
+                const pos = screenToMap(e.offsetX, e.offsetY);
+                startX = pos.x;
+                startY = pos.y;
+                currentBox = { x: startX, y: startY, w: 0, h: 0 };
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (isPanning) {
+                panX += e.clientX - lastX;
+                panY += e.clientY - lastY;
+                lastX = e.clientX;
+                lastY = e.clientY;
+                render();
+            } else if (isDrawing && currentBox) {
+                const pos = screenToMap(e.offsetX, e.offsetY);
+                currentBox.w = pos.x - startX;
+                currentBox.h = pos.y - startY;
+                render();
+            }
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            if (isPanning) {
+                isPanning = false;
+            } else if (isDrawing && currentBox) {
+                isDrawing = false;
+                // Normalize box (handle negative width/height)
+                const box = {
+                    x: currentBox.w < 0 ? startX + currentBox.w : startX,
+                    y: currentBox.h < 0 ? startY + currentBox.h : startY,
+                    w: Math.abs(currentBox.w),
+                    h: Math.abs(currentBox.h),
+                    color: strokeColorInput.value,
+                    taskName: taskSelect.options[taskSelect.selectedIndex].text,
+                    taskKey: taskSelect.value
+                };
+
+                // Only add if box has some size
+                if (box.w > 10 && box.h > 10) {
+                    boxes.push(box);
+                    updateBoxList();
+                }
+                currentBox = null;
+                render();
+            }
+        });
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+            const mouseX = e.offsetX;
+            const mouseY = e.offsetY;
+
+            // Zoom toward mouse position
+            const wx = (mouseX - panX) / scale;
+            const wy = (mouseY - panY) / scale;
+
+            scale *= zoomFactor;
+            scale = Math.max(0.05, Math.min(2, scale));
+
+            panX = mouseX - wx * scale;
+            panY = mouseY - wy * scale;
+
+            render();
+        });
+
+        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        function updateBoxList() {
+            document.querySelector('h3:nth-of-type(4)').textContent = `Task Boxes (${boxes.length})`;
+            boxListEl.innerHTML = boxes.map((box, i) => `
+                <div class="box-item" data-index="${i}">
+                    <span>${box.taskName}</span>
+                    <button class="delete-btn" onclick="deleteBox(${i})">X</button>
+                </div>
+            `).join('');
+        }
+
+        function deleteBox(index) {
+            boxes.splice(index, 1);
+            updateBoxList();
+            render();
+        }
+
+        document.getElementById('clearAll').addEventListener('click', () => {
+            if (confirm('Clear all boxes?')) {
+                boxes = [];
+                updateBoxList();
+                render();
+            }
+        });
+
+        document.getElementById('exportJson').addEventListener('click', () => {
+            const gameScale = 0.25;
+            const output = boxes.map(box => ({
+                x: Math.round(box.x * gameScale * 100) / 100,
+                y: Math.round(box.y * gameScale * 100) / 100,
+                w: Math.round(box.w * gameScale * 100) / 100,
+                h: Math.round(box.h * gameScale * 100) / 100,
+                color: box.color,
+                taskKey: box.taskKey,
+                alwaysVisible: box.taskKey.includes('ALWAYS')
+            }));
+            outputEl.value = JSON.stringify(output, null, 2);
+        });
+
+        document.getElementById('copyCode').addEventListener('click', () => {
+            const gameScale = 0.25;
+            let code = 'this.taskBoxes = [\n';
+            for (const box of boxes) {
+                const x = Math.round(box.x * gameScale * 100) / 100;
+                const y = Math.round(box.y * gameScale * 100) / 100;
+                const w = Math.round(box.w * gameScale * 100) / 100;
+                const h = Math.round(box.h * gameScale * 100) / 100;
+                const [taskName, taskRoom] = box.taskKey.split('|');
+
+                if (box.taskKey.includes('ALWAYS')) {
+                    code += `    { x: ${x}, y: ${y}, w: ${w}, h: ${h}, color: '${box.color}', alwaysVisible: true },\n`;
+                } else {
+                    code += `    { x: ${x}, y: ${y}, w: ${w}, h: ${h}, color: '${box.color}', taskName: '${taskName}', taskRoom: '${taskRoom}' },\n`;
+                }
+            }
+            code += '];';
+            outputEl.value = code;
+            navigator.clipboard.writeText(code);
+            alert('Code copied to clipboard!');
+        });
+
+        // Initial render
+        resizeCanvas();
+    </script>
+</body>
+</html>

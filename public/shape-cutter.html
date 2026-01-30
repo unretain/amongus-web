@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Shape Cutter - Map Region Editor</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a2e;
+            color: #fff;
+            display: flex;
+            height: 100vh;
+        }
+        #sidebar {
+            width: 300px;
+            background: #16213e;
+            padding: 15px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        #canvas-container {
+            flex: 1;
+            overflow: auto;
+            position: relative;
+            background: #000;
+        }
+        canvas {
+            cursor: crosshair;
+            display: block;
+        }
+        h2 { color: #e94560; margin-bottom: 10px; }
+        h3 { color: #0f3460; background: #e94560; padding: 5px 10px; margin: 10px 0; }
+        button {
+            background: #e94560;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            cursor: pointer;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        button:hover { background: #ff6b6b; }
+        button.secondary { background: #0f3460; }
+        button.secondary:hover { background: #1a5276; }
+        input, select {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: none;
+            border-radius: 3px;
+            background: #0f3460;
+            color: white;
+        }
+        .shape-item {
+            background: #0f3460;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .shape-item:hover { background: #1a5276; }
+        .shape-item.selected { border: 2px solid #e94560; }
+        .shape-item .delete-btn {
+            background: #c0392b;
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        #output {
+            background: #0a0a15;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 11px;
+            max-height: 200px;
+            overflow: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .controls { display: flex; gap: 5px; flex-wrap: wrap; }
+        .info {
+            background: #0f3460;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+        #zoom-controls { display: flex; gap: 5px; align-items: center; }
+        #zoom-controls span { min-width: 50px; text-align: center; }
+        .tab-buttons { display: flex; gap: 5px; }
+        .tab-buttons button { flex: 1; }
+        .tab-buttons button.active { background: #ff6b6b; }
+        #status { color: #0f0; font-size: 12px; padding: 5px; background: #000; }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <h2>Shape Cutter</h2>
+        <div id="status">Loading...</div>
+
+        <div class="tab-buttons">
+            <button id="tab-minimap" class="active" onclick="switchImage('minimap')">Minimap</button>
+            <button id="tab-fullmap" onclick="switchImage('fullmap')">Full Map</button>
+        </div>
+
+        <div id="zoom-controls">
+            <button onclick="zoomOut()">-</button>
+            <span id="zoom-level">100%</span>
+            <button onclick="zoomIn()">+</button>
+            <button onclick="resetZoom()">Reset</button>
+        </div>
+
+        <div class="info">
+            <strong>Instructions:</strong><br>
+            1. Click to add points<br>
+            2. Right-click to close shape<br>
+            3. Enter label and save<br>
+            4. Click shape to select/edit
+        </div>
+
+        <h3>Current Shape</h3>
+        <input type="text" id="shape-label" placeholder="Shape label (e.g., Cafeteria)">
+        <input type="color" id="shape-color" value="#ff0000">
+        <div class="controls">
+            <button onclick="saveCurrentShape()">Save Shape</button>
+            <button class="secondary" onclick="clearCurrentShape()">Clear</button>
+            <button class="secondary" onclick="undoPoint()">Undo</button>
+        </div>
+
+        <h3>Saved Shapes (<span id="shape-count">0</span>)</h3>
+        <div id="shapes-list"></div>
+
+        <h3>Export</h3>
+        <div class="controls">
+            <button onclick="exportJSON()">Copy JSON</button>
+            <button class="secondary" onclick="importJSON()">Import</button>
+        </div>
+        <div id="output"></div>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const status = document.getElementById('status');
+
+        let currentImage = 'minimap';
+        let minimapImg = null;
+        let fullmapImg = null;
+        let zoom = 1;
+        let currentPoints = [];
+        let savedShapes = { minimap: [], fullmap: [] };
+        let selectedShapeIndex = -1;
+
+        function log(msg) {
+            status.textContent = msg;
+            console.log(msg);
+        }
+
+        // Load minimap
+        minimapImg = new Image();
+        minimapImg.onload = function() {
+            log('Minimap loaded: ' + minimapImg.width + 'x' + minimapImg.height);
+            if (currentImage === 'minimap') showImage();
+        };
+        minimapImg.onerror = function() {
+            log('ERROR: Failed to load minimap');
+        };
+        minimapImg.src = '/assets/minimap.png';
+
+        // Load fullmap
+        fullmapImg = new Image();
+        fullmapImg.onload = function() {
+            log('Fullmap loaded: ' + fullmapImg.width + 'x' + fullmapImg.height);
+            if (currentImage === 'fullmap') showImage();
+        };
+        fullmapImg.onerror = function() {
+            log('ERROR: Failed to load fullmap');
+        };
+        fullmapImg.src = '/assets/skeld-full.webp';
+
+        function getCurrentImg() {
+            return currentImage === 'minimap' ? minimapImg : fullmapImg;
+        }
+
+        function showImage() {
+            const img = getCurrentImg();
+            if (!img || !img.complete || !img.naturalWidth) {
+                log('Image not ready yet...');
+                return;
+            }
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            log(currentImage + ': ' + img.naturalWidth + 'x' + img.naturalHeight);
+            draw();
+        }
+
+        function switchImage(type) {
+            currentImage = type;
+            document.getElementById('tab-minimap').classList.toggle('active', type === 'minimap');
+            document.getElementById('tab-fullmap').classList.toggle('active', type === 'fullmap');
+            currentPoints = [];
+            selectedShapeIndex = -1;
+            zoom = 1;
+            updateZoom();
+            updateShapesList();
+            showImage();
+        }
+
+        function zoomIn() { zoom = Math.min(zoom * 1.25, 5); updateZoom(); }
+        function zoomOut() { zoom = Math.max(zoom / 1.25, 0.1); updateZoom(); }
+        function resetZoom() { zoom = 1; updateZoom(); }
+        function updateZoom() {
+            document.getElementById('zoom-level').textContent = Math.round(zoom * 100) + '%';
+            canvas.style.transform = 'scale(' + zoom + ')';
+            canvas.style.transformOrigin = 'top left';
+        }
+
+        function getMousePos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            return {
+                x: Math.round((e.clientX - rect.left) * scaleX),
+                y: Math.round((e.clientY - rect.top) * scaleY)
+            };
+        }
+
+        function draw() {
+            const img = getCurrentImg();
+            if (!img || !img.complete || !img.naturalWidth) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+
+            // Draw saved shapes
+            savedShapes[currentImage].forEach((shape, i) => drawShape(shape, i === selectedShapeIndex));
+
+            // Draw current points
+            if (currentPoints.length > 0) {
+                ctx.beginPath();
+                ctx.moveTo(currentPoints[0].x, currentPoints[0].y);
+                for (let i = 1; i < currentPoints.length; i++) {
+                    ctx.lineTo(currentPoints[i].x, currentPoints[i].y);
+                }
+                ctx.strokeStyle = '#00ff00';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                currentPoints.forEach((p, i) => {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+                    ctx.fillStyle = i === 0 ? '#ff0' : '#0f0';
+                    ctx.fill();
+                    ctx.strokeStyle = '#000';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                });
+            }
+        }
+
+        function drawShape(shape, isSelected) {
+            if (shape.points.length < 3) return;
+            ctx.beginPath();
+            ctx.moveTo(shape.points[0].x, shape.points[0].y);
+            for (let i = 1; i < shape.points.length; i++) {
+                ctx.lineTo(shape.points[i].x, shape.points[i].y);
+            }
+            ctx.closePath();
+            ctx.fillStyle = shape.color + '40';
+            ctx.fill();
+            ctx.strokeStyle = isSelected ? '#fff' : shape.color;
+            ctx.lineWidth = isSelected ? 4 : 2;
+            ctx.stroke();
+
+            // Label
+            const cx = shape.points.reduce((a, p) => a + p.x, 0) / shape.points.length;
+            const cy = shape.points.reduce((a, p) => a + p.y, 0) / shape.points.length;
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'center';
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 4;
+            ctx.strokeText(shape.label, cx, cy);
+            ctx.fillStyle = '#fff';
+            ctx.fillText(shape.label, cx, cy);
+        }
+
+        canvas.addEventListener('click', (e) => {
+            const pos = getMousePos(e);
+            // Check if clicking shape
+            for (let i = savedShapes[currentImage].length - 1; i >= 0; i--) {
+                if (pointInPoly(pos, savedShapes[currentImage][i].points)) {
+                    selectedShapeIndex = i;
+                    document.getElementById('shape-label').value = savedShapes[currentImage][i].label;
+                    document.getElementById('shape-color').value = savedShapes[currentImage][i].color;
+                    updateShapesList();
+                    draw();
+                    return;
+                }
+            }
+            currentPoints.push(pos);
+            selectedShapeIndex = -1;
+            draw();
+        });
+
+        canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            if (currentPoints.length >= 3) {
+                const label = prompt('Label for this shape:');
+                if (label) {
+                    document.getElementById('shape-label').value = label;
+                    saveCurrentShape();
+                }
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            const pos = getMousePos(e);
+            document.title = 'Shape Cutter (' + pos.x + ', ' + pos.y + ')';
+        });
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            if (e.deltaY < 0) zoomIn(); else zoomOut();
+        });
+
+        function pointInPoly(pt, poly) {
+            let inside = false;
+            for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+                const xi = poly[i].x, yi = poly[i].y;
+                const xj = poly[j].x, yj = poly[j].y;
+                if (((yi > pt.y) !== (yj > pt.y)) && (pt.x < (xj - xi) * (pt.y - yi) / (yj - yi) + xi)) {
+                    inside = !inside;
+                }
+            }
+            return inside;
+        }
+
+        function saveCurrentShape() {
+            const label = document.getElementById('shape-label').value.trim();
+            const color = document.getElementById('shape-color').value;
+            if (currentPoints.length < 3) { alert('Need 3+ points'); return; }
+            if (!label) { alert('Enter a label'); return; }
+            savedShapes[currentImage].push({ label, color, points: [...currentPoints] });
+            currentPoints = [];
+            document.getElementById('shape-label').value = '';
+            updateShapesList();
+            updateOutput();
+            draw();
+        }
+
+        function clearCurrentShape() { currentPoints = []; draw(); }
+        function undoPoint() { if (currentPoints.length) { currentPoints.pop(); draw(); } }
+        function deleteShape(i) {
+            savedShapes[currentImage].splice(i, 1);
+            if (selectedShapeIndex === i) selectedShapeIndex = -1;
+            updateShapesList();
+            updateOutput();
+            draw();
+        }
+
+        function updateShapesList() {
+            const shapes = savedShapes[currentImage];
+            document.getElementById('shape-count').textContent = shapes.length;
+            document.getElementById('shapes-list').innerHTML = shapes.map((s, i) =>
+                '<div class="shape-item ' + (i === selectedShapeIndex ? 'selected' : '') + '" onclick="selectShape(' + i + ')">' +
+                '<span style="color:' + s.color + '">■</span> ' + s.label + ' (' + s.points.length + ')' +
+                '<button class="delete-btn" onclick="event.stopPropagation();deleteShape(' + i + ')">X</button></div>'
+            ).join('');
+        }
+
+        function selectShape(i) {
+            selectedShapeIndex = i;
+            document.getElementById('shape-label').value = savedShapes[currentImage][i].label;
+            document.getElementById('shape-color').value = savedShapes[currentImage][i].color;
+            updateShapesList();
+            draw();
+        }
+
+        function updateOutput() {
+            document.getElementById('output').textContent = JSON.stringify(savedShapes, null, 2);
+        }
+
+        function exportJSON() {
+            navigator.clipboard.writeText(JSON.stringify(savedShapes, null, 2)).then(() => alert('Copied!'));
+        }
+
+        function importJSON() {
+            const json = prompt('Paste JSON:');
+            if (!json) return;
+            try {
+                const data = JSON.parse(json);
+                if (data.minimap) savedShapes.minimap = data.minimap;
+                if (data.fullmap) savedShapes.fullmap = data.fullmap;
+                updateShapesList();
+                updateOutput();
+                draw();
+            } catch (e) { alert('Invalid JSON'); }
+        }
+
+        // Load saved shapes
+        fetch('/assets/minimap-rooms.json')
+            .then(r => r.json())
+            .then(data => {
+                if (data.minimap) savedShapes.minimap = data.minimap;
+                if (data.fullmap) savedShapes.fullmap = data.fullmap;
+                updateShapesList();
+                updateOutput();
+                draw();
+                log('Loaded ' + savedShapes.minimap.length + ' minimap shapes');
+            })
+            .catch(() => log('No saved shapes'));
+
+        updateZoom();
+    </script>
+</body>
+</html>

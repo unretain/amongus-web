@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sprite Debug - Multi Texture</title>
+    <style>
+        body { background: #333; color: white; font-family: monospace; }
+        canvas { border: 1px solid white; margin: 5px; background: #222; }
+        .frame { display: inline-block; margin: 5px; text-align: center; vertical-align: top; }
+        .texture-row { margin-bottom: 20px; border-bottom: 2px solid #666; padding-bottom: 10px; }
+        h2 { color: #0ff; }
+        h3 { color: #ff0; }
+    </style>
+</head>
+<body>
+    <h1>Sprite Debug - Testing All 3 Textures</h1>
+    <p>Testing same coordinates against all three texture files to find correct mapping.</p>
+    <div id="sprites"></div>
+
+    <script type="module">
+        const spriteData = await fetch('/assets/sprite-data.json').then(r => r.json());
+
+        const textureFiles = [
+            '/assets/PlayerAnimations.png',
+            '/assets/PlayerAnimations_0.png',
+            '/assets/PlayerAnimations_1.png'
+        ];
+
+        function loadImage(src) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = () => resolve(null); // Resolve null on error instead of reject
+                img.src = src;
+            });
+        }
+
+        const textures = await Promise.all(textureFiles.map(loadImage));
+        const container = document.getElementById('sprites');
+
+        // For each texture, show what idle and walk look like
+        for (let t = 0; t < textures.length; t++) {
+            const texture = textures[t];
+            if (!texture) {
+                container.innerHTML += `<h2>Texture ${t}: ${textureFiles[t]} - FAILED TO LOAD</h2>`;
+                continue;
+            }
+
+            container.innerHTML += `<div class="texture-row"><h2>Texture ${t}: ${textureFiles[t]} (${texture.width}x${texture.height})</h2>`;
+
+            // Show idle frame from this texture
+            if (spriteData.idle.length > 0) {
+                const frame = spriteData.idle[0];
+                container.innerHTML += `<h3>Idle: ${frame.name} at (${frame.x}, ${frame.y}) ${frame.width}x${frame.height}</h3>`;
+
+                const div = document.createElement('div');
+                div.className = 'frame';
+
+                const canvas = document.createElement('canvas');
+                canvas.width = frame.width;
+                canvas.height = frame.height;
+                const ctx = canvas.getContext('2d');
+
+                // Unity coords (bottom-left origin) to canvas (top-left origin)
+                const srcY = texture.height - frame.y - frame.height;
+                ctx.drawImage(texture, frame.x, srcY, frame.width, frame.height, 0, 0, frame.width, frame.height);
+
+                div.appendChild(canvas);
+                container.appendChild(div);
+            }
+
+            // Show first 4 walk frames from this texture
+            container.innerHTML += `<h3>Walk Frames (first 4):</h3>`;
+            const walkContainer = document.createElement('div');
+            for (let i = 0; i < Math.min(4, spriteData.walk.length); i++) {
+                const frame = spriteData.walk[i];
+                const div = document.createElement('div');
+                div.className = 'frame';
+                div.innerHTML = `<p>${frame.name}<br>(${frame.x},${frame.y})</p>`;
+
+                const canvas = document.createElement('canvas');
+                canvas.width = frame.width;
+                canvas.height = frame.height;
+                const ctx = canvas.getContext('2d');
+
+                const srcY = texture.height - frame.y - frame.height;
+                ctx.drawImage(texture, frame.x, srcY, frame.width, frame.height, 0, 0, frame.width, frame.height);
+
+                div.appendChild(canvas);
+                walkContainer.appendChild(div);
+            }
+            container.appendChild(walkContainer);
+            container.innerHTML += '</div>';
+        }
+    </script>
+</body>
+</html>

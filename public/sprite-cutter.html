@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sprite Cutter & Assembler</title>
+    <style>
+        body {
+            background: #1a1a2e;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 10px;
+            overflow: hidden;
+        }
+        #controls {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #16213e;
+            padding: 8px;
+            z-index: 1000;
+            border-bottom: 2px solid #0f3460;
+            font-size: 13px;
+        }
+        #controls button {
+            padding: 6px 12px;
+            margin: 2px;
+            cursor: pointer;
+            background: #0f3460;
+            color: white;
+            border: 1px solid #e94560;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        #controls button:hover { background: #e94560; }
+        #controls button.active { background: #e94560; }
+        #controls input[type="number"] { width: 50px; }
+        #main-container {
+            display: flex;
+            margin-top: 130px;
+            height: calc(100vh - 140px);
+        }
+        #source-panel {
+            width: 55%;
+            overflow: auto;
+            border-right: 2px solid #0f3460;
+            padding: 10px;
+            padding-bottom: 200px;
+        }
+        #assembly-panel {
+            width: 45%;
+            overflow: auto;
+            padding: 10px;
+            padding-bottom: 200px;
+        }
+        #source-canvas, #assembly-canvas {
+            border: 1px solid #444;
+        }
+        #source-canvas { cursor: crosshair; }
+        #assembly-canvas {
+            background: repeating-conic-gradient(#333 0% 25%, #222 0% 50%) 50% / 20px 20px;
+        }
+        .layer-item {
+            display: flex;
+            align-items: center;
+            padding: 4px;
+            margin: 2px 0;
+            background: #0f3460;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        .layer-item.selected { background: #e94560; }
+        .layer-item.hidden { opacity: 0.5; }
+        #layers-panel {
+            position: fixed;
+            right: 10px;
+            bottom: 10px;
+            width: 200px;
+            max-height: 250px;
+            overflow-y: auto;
+            background: #16213e;
+            border: 2px solid #e94560;
+            border-radius: 4px;
+            padding: 8px;
+            z-index: 999;
+            font-size: 12px;
+        }
+        #layers-panel button { padding: 4px 8px; font-size: 11px; }
+        #cut-pieces {
+            position: fixed;
+            left: 10px;
+            bottom: 10px;
+            width: calc(55% - 230px);
+            height: 180px;
+            overflow-x: auto;
+            overflow-y: hidden;
+            background: #16213e;
+            border: 2px solid #e94560;
+            border-radius: 4px;
+            padding: 10px;
+            display: flex;
+            gap: 10px;
+            z-index: 999;
+        }
+        #cut-pieces-header {
+            position: fixed;
+            left: 10px;
+            bottom: 195px;
+            color: #e94560;
+            font-weight: bold;
+            z-index: 1000;
+            font-size: 12px;
+        }
+        .cut-piece {
+            flex-shrink: 0;
+            cursor: grab;
+            border: 2px solid #0f3460;
+            background: repeating-conic-gradient(#333 0% 25%, #222 0% 50%) 50% / 10px 10px;
+            position: relative;
+        }
+        .cut-piece:hover { border-color: #e94560; }
+        .cut-piece.selected { border-color: #00ff00; }
+        .cut-piece .frame-badge {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            background: #e94560;
+            padding: 2px 5px;
+            font-size: 10px;
+        }
+        .info { color: #888; font-size: 12px; }
+        #selection-box {
+            position: absolute;
+            border: 2px dashed #00ff00;
+            pointer-events: none;
+            display: none;
+        }
+        #lasso-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+        #frame-preview {
+            position: fixed;
+            left: calc(55% - 210px);
+            bottom: 10px;
+            width: 190px;
+            height: 180px;
+            background: #16213e;
+            border: 2px solid #e94560;
+            border-radius: 4px;
+            padding: 8px;
+            z-index: 999;
+        }
+        #frame-preview canvas {
+            background: repeating-conic-gradient(#333 0% 25%, #222 0% 50%) 50% / 10px 10px;
+            max-width: 100%;
+            max-height: 100px;
+            display: block;
+            margin: 0 auto;
+        }
+        #frame-preview .controls {
+            display: flex;
+            justify-content: center;
+            gap: 5px;
+            margin-top: 5px;
+        }
+        #frame-preview button { padding: 4px 10px; }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <strong>Source:</strong>
+        <input type="file" id="imageInput" accept="image/*" style="width:150px">
+        <button onclick="loadDefaultLobby()">Load Lobby</button>
+        <strong style="margin-left:10px">Zoom:</strong>
+        <button onclick="setSourceZoom(0.5)">0.5x</button>
+        <button onclick="setSourceZoom(1)" class="active">1x</button>
+        <button onclick="setSourceZoom(2)">2x</button>
+        <span id="sourceSize" class="info" style="margin-left:10px"></span>
+
+        <span style="margin-left:20px"><strong>Tools:</strong></span>
+        <button id="selectBtn" class="active" onclick="setTool('select')">Rectangle</button>
+        <button id="lassoBtn" onclick="setTool('lasso')">Lasso</button>
+        <button onclick="cutSelection()">Cut</button>
+        <button onclick="deleteSelected()">Delete</button>
+
+        <span style="margin-left:20px"><strong>Assembly:</strong></span>
+        <input type="number" id="canvasWidth" value="1920"> x
+        <input type="number" id="canvasHeight" value="1080">
+        <button onclick="resizeAssembly()">Resize</button>
+        <button onclick="setAssemblyZoom(0.25)">0.25x</button>
+        <button onclick="setAssemblyZoom(0.5)">0.5x</button>
+        <button onclick="setAssemblyZoom(1)">1x</button>
+        <button onclick="exportAssembly()">Export PNG</button>
+        <br>
+        <strong>Sprite Sheet:</strong>
+        Cols:<input type="number" id="frameCols" value="1" min="1" style="width:40px">
+        Rows:<input type="number" id="frameRows" value="1" min="1" style="width:40px">
+        <button onclick="cutAsFrames()">Cut as Frames</button>
+
+        <span style="margin-left:20px"><strong>Selected Layer:</strong></span>
+        <button onclick="rotateLayer(-90)">Rotate -90</button>
+        <button onclick="rotateLayer(90)">Rotate +90</button>
+        <button onclick="flipLayerH()">Flip H</button>
+        <button onclick="flipLayerV()">Flip V</button>
+
+        <span style="margin-left:20px;color:#00ff00"><strong>Canvas Frames:</strong></span>
+        <button onclick="saveCurrentFrame()" style="background:#ff8c00;font-weight:bold">Save Frame</button>
+        <button onclick="nextCanvasFrame()" style="background:#228b22">Next Frame</button>
+        <span id="canvasFrameInfo" style="color:#0f0;margin-left:5px">Frame 1</span>
+        <button onclick="prevCanvasFrame()">◀ Prev</button>
+        <button onclick="playCanvasFrames()" id="playCanvasBtn">▶ Play</button>
+        <button onclick="exportAllCanvasFrames()" style="background:#4169e1">Export All</button>
+        <button onclick="toggleOnionSkin()" id="onionBtn" style="background:#9932cc">Onion: ON</button>
+    </div>
+
+    <div id="main-container">
+        <div id="source-panel">
+            <div style="position: relative; display: inline-block;">
+                <canvas id="source-canvas"></canvas>
+                <canvas id="lasso-overlay"></canvas>
+                <div id="selection-box"></div>
+            </div>
+        </div>
+        <div id="assembly-panel">
+            <canvas id="assembly-canvas"></canvas>
+        </div>
+    </div>
+
+    <div id="cut-pieces-header">CUT PIECES (drag to assembly)</div>
+    <div id="cut-pieces"></div>
+
+    <div id="frame-preview">
+        <strong>Frame Preview</strong>
+        <canvas id="preview-canvas" width="170" height="100"></canvas>
+        <div class="controls">
+            <button onclick="prevFrame()">Prev</button>
+            <span id="frame-info">-</span>
+            <button onclick="nextFrame()">Next</button>
+        </div>
+        <div class="controls">
+            <button onclick="togglePlayFrames()" id="playBtn">Play</button>
+        </div>
+    </div>
+
+    <div id="layers-panel">
+        <strong>Layers</strong>
+        <div id="layers-list"></div>
+        <div style="margin-top:5px">
+            <button onclick="moveLayerUp()">Up</button>
+            <button onclick="moveLayerDown()">Down</button>
+            <button onclick="toggleLayerVisibility()">Toggle</button>
+        </div>
+    </div>
+
+    <script>
+        const sourceCanvas = document.getElementById('source-canvas');
+        const sourceCtx = sourceCanvas.getContext('2d');
+        const assemblyCanvas = document.getElementById('assembly-canvas');
+        const assemblyCtx = assemblyCanvas.getContext('2d');
+        const selectionBox = document.getElementById('selection-box');
+        const previewCanvas = document.getElementById('preview-canvas');
+        const previewCtx = previewCanvas.getContext('2d');
+
+        let sourceImg = new Image();
+        let sourceZoom = 1;
+        let assemblyZoom = 0.5;
+        let tool = 'select';
+
+        let isSelecting = false;
+        let selStart = { x: 0, y: 0 };
+        let selEnd = { x: 0, y: 0 };
+
+        // Lasso tool state
+        let lassoPoints = [];
+        let isLassoDrawing = false;
+        const lassoOverlay = document.getElementById('lasso-overlay');
+        const lassoCtx = lassoOverlay.getContext('2d');
+
+        let cutPieces = [];
+        let layers = [];
+        let selectedLayerIndex = -1;
+        let selectedPieceIndex = -1;
+
+        let isDragging = false;
+        let dragPiece = null;
+        let dragOffset = { x: 0, y: 0 };
+
+        let assemblyWidth = 1920;
+        let assemblyHeight = 1080;
+
+        // Frame animation
+        let isPlaying = false;
+        let playInterval = null;
+
+        function loadDefaultLobby() {
+            sourceImg.src = '/assets/players/Player-sharedassets0.assets-55.png';
+        }
+
+        // Canvas frames - each frame stores a flattened snapshot
+        let canvasFrames = [];
+        let currentCanvasFrame = 0;
+        let isPlayingCanvas = false;
+        let playCanvasInterval = null;
+
+        // Onion skinning settings
+        let onionSkinEnabled = true;
+        let onionSkinFrames = 3; // How many previous frames to show
+
+        // Load pre-assembled map as first frame
+        function loadAssembledMap() {
+            const assembledImg = new Image();
+            assembledImg.onload = function() {
+                // Set canvas size to match
+                assemblyWidth = assembledImg.width;
+                assemblyHeight = assembledImg.height;
+                document.getElementById('canvasWidth').value = assemblyWidth;
+                document.getElementById('canvasHeight').value = assemblyHeight;
+
+                // Save as base background (this never changes)
+                baseBackground = document.createElement('canvas');
+                baseBackground.width = assembledImg.width;
+                baseBackground.height = assembledImg.height;
+                baseBackground.getContext('2d').drawImage(assembledImg, 0, 0);
+
+                // Create first frame starting with base background
+                const frameCanvas = document.createElement('canvas');
+                frameCanvas.width = assembledImg.width;
+                frameCanvas.height = assembledImg.height;
+                frameCanvas.getContext('2d').drawImage(assembledImg, 0, 0);
+                canvasFrames.push(frameCanvas);
+                currentCanvasFrame = 0;
+                updateCanvasFrameInfo();
+                drawAssembly();
+            };
+            assembledImg.src = '/assets/assembled-map.png';
+        }
+
+        // Store the original base background
+        let baseBackground = null;
+
+        function saveCurrentFrame() {
+            // Only save if there are layers to bake in
+            if (layers.length === 0) {
+                return; // Nothing to save, don't overwrite
+            }
+
+            // Save current frame + layers as a new snapshot
+            const frameCanvas = document.createElement('canvas');
+            frameCanvas.width = assemblyWidth;
+            frameCanvas.height = assemblyHeight;
+            const ctx = frameCanvas.getContext('2d');
+
+            // Draw current frame first (which may already have stuff baked in)
+            if (canvasFrames[currentCanvasFrame]) {
+                ctx.drawImage(canvasFrames[currentCanvasFrame], 0, 0);
+            }
+
+            // Then draw all current layers on top
+            for (const layer of layers) {
+                if (!layer.visible) continue;
+                const frame = layer.frames[layer.currentFrame || 0];
+                ctx.save();
+                ctx.translate(layer.x + layer.width / 2, layer.y + layer.height / 2);
+                ctx.rotate((layer.rotation || 0) * Math.PI / 180);
+                ctx.scale(layer.flipH ? -1 : 1, layer.flipV ? -1 : 1);
+                ctx.drawImage(frame, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+                ctx.restore();
+            }
+
+            // Save this as current frame
+            canvasFrames[currentCanvasFrame] = frameCanvas;
+
+            // Clear layers (they're now baked into the frame)
+            layers = [];
+            selectedLayerIndex = -1;
+
+            updateCanvasFrameInfo();
+            drawAssembly();
+        }
+
+        function nextCanvasFrame() {
+            // Save current frame if there are layers
+            if (layers.length > 0) {
+                const frameCanvas = document.createElement('canvas');
+                frameCanvas.width = assemblyWidth;
+                frameCanvas.height = assemblyHeight;
+                const ctx = frameCanvas.getContext('2d');
+
+                // Draw current frame first
+                if (canvasFrames[currentCanvasFrame]) {
+                    ctx.drawImage(canvasFrames[currentCanvasFrame], 0, 0);
+                }
+
+                // Then draw layers
+                for (const layer of layers) {
+                    if (!layer.visible) continue;
+                    const frame = layer.frames[layer.currentFrame || 0];
+                    ctx.save();
+                    ctx.translate(layer.x + layer.width / 2, layer.y + layer.height / 2);
+                    ctx.rotate((layer.rotation || 0) * Math.PI / 180);
+                    ctx.scale(layer.flipH ? -1 : 1, layer.flipV ? -1 : 1);
+                    ctx.drawImage(frame, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+                    ctx.restore();
+                }
+
+                canvasFrames[currentCanvasFrame] = frameCanvas;
+                layers = [];
+                selectedLayerIndex = -1;
+            }
+
+            // Move to next frame (create new if needed)
+            currentCanvasFrame++;
+            if (currentCanvasFrame >= canvasFrames.length) {
+                // New frame starts with JUST the base background (no layers carried over)
+                const newFrame = document.createElement('canvas');
+                newFrame.width = assemblyWidth;
+                newFrame.height = assemblyHeight;
+                if (baseBackground) {
+                    newFrame.getContext('2d').drawImage(baseBackground, 0, 0);
+                }
+                canvasFrames.push(newFrame);
+            }
+
+            updateCanvasFrameInfo();
+            drawAssembly();
+        }
+
+        function prevCanvasFrame() {
+            if (currentCanvasFrame > 0) {
+                currentCanvasFrame--;
+                layers = [];
+                selectedLayerIndex = -1;
+                updateCanvasFrameInfo();
+                drawAssembly();
+            }
+        }
+
+        function updateCanvasFrameInfo() {
+            document.getElementById('canvasFrameInfo').textContent =
+                `Frame ${currentCanvasFrame + 1}/${canvasFrames.length || 1}`;
+        }
+
+        function playCanvasFrames() {
+            isPlayingCanvas = !isPlayingCanvas;
+            document.getElementById('playCanvasBtn').textContent = isPlayingCanvas ? '■ Stop' : '▶ Play';
+
+            if (isPlayingCanvas) {
+                playCanvasInterval = setInterval(() => {
+                    currentCanvasFrame = (currentCanvasFrame + 1) % canvasFrames.length;
+                    updateCanvasFrameInfo();
+                    drawAssembly();
+                }, 200);
+            } else {
+                clearInterval(playCanvasInterval);
+            }
+        }
+
+        function toggleOnionSkin() {
+            onionSkinEnabled = !onionSkinEnabled;
+            document.getElementById('onionBtn').textContent = 'Onion: ' + (onionSkinEnabled ? 'ON' : 'OFF');
+            document.getElementById('onionBtn').style.background = onionSkinEnabled ? '#9932cc' : '#666';
+            drawAssembly();
+        }
+
+        function exportAllCanvasFrames() {
+            // First save current frame with any layers on it
+            if (layers.length > 0) {
+                const frameCanvas = document.createElement('canvas');
+                frameCanvas.width = assemblyWidth;
+                frameCanvas.height = assemblyHeight;
+                const ctx = frameCanvas.getContext('2d');
+
+                if (baseBackground) {
+                    ctx.drawImage(baseBackground, 0, 0);
+                }
+
+                for (const layer of layers) {
+                    if (!layer.visible) continue;
+                    const frame = layer.frames[layer.currentFrame || 0];
+                    ctx.save();
+                    ctx.translate(layer.x + layer.width / 2, layer.y + layer.height / 2);
+                    ctx.rotate((layer.rotation || 0) * Math.PI / 180);
+                    ctx.scale(layer.flipH ? -1 : 1, layer.flipV ? -1 : 1);
+                    ctx.drawImage(frame, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+                    ctx.restore();
+                }
+
+                canvasFrames[currentCanvasFrame] = frameCanvas;
+            }
+
+            // Now export all frames
+            canvasFrames.forEach((frame, i) => {
+                setTimeout(() => {
+                    const link = document.createElement('a');
+                    link.download = `lobby-frame-${i + 1}.png`;
+                    link.href = frame.toDataURL('image/png');
+                    link.click();
+                }, i * 100); // Small delay between downloads
+            });
+        }
+
+        // Load player spritesheet on startup
+        setTimeout(loadDefaultLobby, 100);
+
+        document.getElementById('imageInput').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (evt) => { sourceImg.src = evt.target.result; };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        sourceImg.onload = function() {
+            document.getElementById('sourceSize').textContent = `${sourceImg.width}x${sourceImg.height}`;
+            drawSource();
+        };
+
+        function drawSource() {
+            sourceCanvas.width = sourceImg.width * sourceZoom;
+            sourceCanvas.height = sourceImg.height * sourceZoom;
+            sourceCtx.imageSmoothingEnabled = false;
+            sourceCtx.drawImage(sourceImg, 0, 0, sourceCanvas.width, sourceCanvas.height);
+            // Resize lasso overlay to match
+            lassoOverlay.width = sourceCanvas.width;
+            lassoOverlay.height = sourceCanvas.height;
+            drawLassoOverlay();
+        }
+
+        function setSourceZoom(z) {
+            sourceZoom = z;
+            drawSource();
+            hideSelection();
+            lassoPoints = [];
+            drawLassoOverlay();
+        }
+
+        function setAssemblyZoom(z) {
+            assemblyZoom = z;
+            drawAssembly();
+        }
+
+        function setTool(t) {
+            tool = t;
+            document.getElementById('selectBtn').classList.toggle('active', t === 'select');
+            document.getElementById('lassoBtn').classList.toggle('active', t === 'lasso');
+            // Clear lasso when switching tools
+            if (t !== 'lasso') {
+                lassoPoints = [];
+                drawLassoOverlay();
+            }
+            hideSelection();
+        }
+
+        function hideSelection() {
+            selectionBox.style.display = 'none';
+        }
+
+        function drawLassoOverlay() {
+            lassoOverlay.width = sourceCanvas.width;
+            lassoOverlay.height = sourceCanvas.height;
+            lassoCtx.clearRect(0, 0, lassoOverlay.width, lassoOverlay.height);
+
+            if (lassoPoints.length > 1) {
+                lassoCtx.beginPath();
+                lassoCtx.moveTo(lassoPoints[0].x * sourceZoom, lassoPoints[0].y * sourceZoom);
+                for (let i = 1; i < lassoPoints.length; i++) {
+                    lassoCtx.lineTo(lassoPoints[i].x * sourceZoom, lassoPoints[i].y * sourceZoom);
+                }
+                if (!isLassoDrawing) {
+                    lassoCtx.closePath();
+                }
+                lassoCtx.strokeStyle = '#00ff00';
+                lassoCtx.lineWidth = 2;
+                lassoCtx.stroke();
+
+                // Fill with semi-transparent green when complete
+                if (!isLassoDrawing && lassoPoints.length > 2) {
+                    lassoCtx.fillStyle = 'rgba(0, 255, 0, 0.2)';
+                    lassoCtx.fill();
+                }
+            }
+        }
+
+        // Point in polygon test (ray casting algorithm)
+        function pointInPolygon(x, y, polygon) {
+            let inside = false;
+            for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+                const xi = polygon[i].x, yi = polygon[i].y;
+                const xj = polygon[j].x, yj = polygon[j].y;
+
+                if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+                    inside = !inside;
+                }
+            }
+            return inside;
+        }
+
+        sourceCanvas.addEventListener('mousedown', (e) => {
+            const rect = sourceCanvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / sourceZoom);
+            const y = Math.floor((e.clientY - rect.top) / sourceZoom);
+
+            if (tool === 'lasso') {
+                isLassoDrawing = true;
+                lassoPoints = [{ x, y }];
+                drawLassoOverlay();
+            } else if (tool === 'select') {
+                selStart.x = x;
+                selStart.y = y;
+                selEnd.x = x;
+                selEnd.y = y;
+                isSelecting = true;
+                updateSelectionBox();
+            }
+        });
+
+        sourceCanvas.addEventListener('mousemove', (e) => {
+            const rect = sourceCanvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / sourceZoom);
+            const y = Math.floor((e.clientY - rect.top) / sourceZoom);
+
+            if (tool === 'lasso' && isLassoDrawing) {
+                const last = lassoPoints[lassoPoints.length - 1];
+                if (last.x !== x || last.y !== y) {
+                    lassoPoints.push({ x, y });
+                }
+                drawLassoOverlay();
+            } else if (tool === 'select' && isSelecting) {
+                selEnd.x = x;
+                selEnd.y = y;
+                updateSelectionBox();
+            }
+        });
+
+        sourceCanvas.addEventListener('mouseup', () => {
+            isSelecting = false;
+            isLassoDrawing = false;
+            drawLassoOverlay();
+        });
+
+        sourceCanvas.addEventListener('mouseleave', () => {
+            if (isLassoDrawing) {
+                isLassoDrawing = false;
+                drawLassoOverlay();
+            }
+        });
+
+        function updateSelectionBox() {
+            const x1 = Math.min(selStart.x, selEnd.x);
+            const y1 = Math.min(selStart.y, selEnd.y);
+            const x2 = Math.max(selStart.x, selEnd.x);
+            const y2 = Math.max(selStart.y, selEnd.y);
+            selectionBox.style.display = 'block';
+            selectionBox.style.left = (x1 * sourceZoom) + 'px';
+            selectionBox.style.top = (y1 * sourceZoom) + 'px';
+            selectionBox.style.width = ((x2 - x1) * sourceZoom) + 'px';
+            selectionBox.style.height = ((y2 - y1) * sourceZoom) + 'px';
+        }
+
+        function cutSelection() {
+            let bounds, mask = null;
+
+            if (tool === 'lasso' && lassoPoints.length > 2) {
+                // Calculate bounding box of lasso
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                for (const p of lassoPoints) {
+                    minX = Math.min(minX, p.x);
+                    minY = Math.min(minY, p.y);
+                    maxX = Math.max(maxX, p.x);
+                    maxY = Math.max(maxY, p.y);
+                }
+                bounds = { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+                // Create mask from lasso points (offset to local coords)
+                mask = lassoPoints.map(p => ({ x: p.x - minX, y: p.y - minY }));
+            } else if (tool === 'select') {
+                const x1 = Math.min(selStart.x, selEnd.x);
+                const y1 = Math.min(selStart.y, selEnd.y);
+                const w = Math.abs(selEnd.x - selStart.x);
+                const h = Math.abs(selEnd.y - selStart.y);
+                if (w < 2 || h < 2) { alert('Select a region first'); return; }
+                bounds = { x: x1, y: y1, w, h };
+            } else {
+                alert('Make a selection first!');
+                return;
+            }
+
+            if (bounds.w < 1 || bounds.h < 1) {
+                alert('Selection too small!');
+                return;
+            }
+
+            const pieceCanvas = document.createElement('canvas');
+            pieceCanvas.width = bounds.w;
+            pieceCanvas.height = bounds.h;
+            const pieceCtx = pieceCanvas.getContext('2d');
+            pieceCtx.drawImage(sourceImg, bounds.x, bounds.y, bounds.w, bounds.h, 0, 0, bounds.w, bounds.h);
+
+            // Apply lasso mask if present
+            if (mask && mask.length > 2) {
+                const imageData = pieceCtx.getImageData(0, 0, bounds.w, bounds.h);
+                const data = imageData.data;
+
+                for (let py = 0; py < bounds.h; py++) {
+                    for (let px = 0; px < bounds.w; px++) {
+                        if (!pointInPolygon(px, py, mask)) {
+                            // Set pixel to transparent
+                            const idx = (py * bounds.w + px) * 4;
+                            data[idx + 3] = 0; // Alpha = 0
+                        }
+                    }
+                }
+                pieceCtx.putImageData(imageData, 0, 0);
+            }
+
+            cutPieces.push({
+                id: Date.now(),
+                canvas: pieceCanvas,
+                width: bounds.w,
+                height: bounds.h,
+                frames: [pieceCanvas],
+                currentFrame: 0,
+                rotation: 0,
+                flipH: false,
+                flipV: false
+            });
+            renderCutPieces();
+            hideSelection();
+            // Clear lasso after cut
+            lassoPoints = [];
+            drawLassoOverlay();
+        }
+
+        function cutAsFrames() {
+            const x1 = Math.min(selStart.x, selEnd.x);
+            const y1 = Math.min(selStart.y, selEnd.y);
+            const w = Math.abs(selEnd.x - selStart.x);
+            const h = Math.abs(selEnd.y - selStart.y);
+            if (w < 2 || h < 2) { alert('Select a region first'); return; }
+
+            const cols = parseInt(document.getElementById('frameCols').value) || 1;
+            const rows = parseInt(document.getElementById('frameRows').value) || 1;
+            const frameW = Math.floor(w / cols);
+            const frameH = Math.floor(h / rows);
+
+            const frames = [];
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < cols; col++) {
+                    const frameCanvas = document.createElement('canvas');
+                    frameCanvas.width = frameW;
+                    frameCanvas.height = frameH;
+                    frameCanvas.getContext('2d').drawImage(
+                        sourceImg,
+                        x1 + col * frameW, y1 + row * frameH, frameW, frameH,
+                        0, 0, frameW, frameH
+                    );
+                    frames.push(frameCanvas);
+                }
+            }
+
+            cutPieces.push({
+                id: Date.now(),
+                canvas: frames[0],
+                width: frameW,
+                height: frameH,
+                frames: frames,
+                currentFrame: 0,
+                rotation: 0,
+                flipH: false,
+                flipV: false
+            });
+            renderCutPieces();
+            hideSelection();
+        }
+
+        function renderCutPieces() {
+            const container = document.getElementById('cut-pieces');
+            container.innerHTML = '';
+            if (cutPieces.length === 0) {
+                container.innerHTML = '<span class="info" style="align-self:center">Select area, click Cut</span>';
+                return;
+            }
+
+            cutPieces.forEach((piece, index) => {
+                const div = document.createElement('div');
+                div.className = 'cut-piece' + (index === selectedPieceIndex ? ' selected' : '');
+                div.draggable = true;
+
+                const maxSize = 120;
+                const scale = Math.min(maxSize / piece.width, maxSize / piece.height, 1);
+                const displayCanvas = document.createElement('canvas');
+                displayCanvas.width = piece.width * scale;
+                displayCanvas.height = piece.height * scale;
+                const ctx = displayCanvas.getContext('2d');
+                ctx.imageSmoothingEnabled = false;
+                ctx.drawImage(piece.frames[piece.currentFrame], 0, 0, displayCanvas.width, displayCanvas.height);
+                div.appendChild(displayCanvas);
+
+                if (piece.frames.length > 1) {
+                    const badge = document.createElement('div');
+                    badge.className = 'frame-badge';
+                    badge.textContent = piece.frames.length + 'f';
+                    div.appendChild(badge);
+                }
+
+                div.addEventListener('dragstart', (e) => {
+                    dragPiece = piece;
+                    e.dataTransfer.effectAllowed = 'copy';
+                });
+
+                div.addEventListener('click', () => {
+                    selectedPieceIndex = index;
+                    renderCutPieces();
+                    updateFramePreview();
+                });
+
+                container.appendChild(div);
+            });
+        }
+
+        function updateFramePreview() {
+            const piece = selectedPieceIndex >= 0 ? cutPieces[selectedPieceIndex] :
+                         (selectedLayerIndex >= 0 ? layers[selectedLayerIndex] : null);
+
+            if (!piece || !piece.frames) {
+                previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+                document.getElementById('frame-info').textContent = '-';
+                return;
+            }
+
+            const frame = piece.frames[piece.currentFrame || 0];
+            const scale = Math.min(170 / frame.width, 100 / frame.height);
+            const w = frame.width * scale;
+            const h = frame.height * scale;
+
+            previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+            previewCtx.imageSmoothingEnabled = false;
+            previewCtx.drawImage(frame, (170 - w) / 2, (100 - h) / 2, w, h);
+
+            document.getElementById('frame-info').textContent =
+                `${(piece.currentFrame || 0) + 1}/${piece.frames.length}`;
+        }
+
+        function prevFrame() {
+            const piece = selectedPieceIndex >= 0 ? cutPieces[selectedPieceIndex] :
+                         (selectedLayerIndex >= 0 ? layers[selectedLayerIndex] : null);
+            if (!piece || !piece.frames) return;
+            piece.currentFrame = (piece.currentFrame - 1 + piece.frames.length) % piece.frames.length;
+            updateFramePreview();
+            renderCutPieces();
+            drawAssembly();
+        }
+
+        function nextFrame() {
+            const piece = selectedPieceIndex >= 0 ? cutPieces[selectedPieceIndex] :
+                         (selectedLayerIndex >= 0 ? layers[selectedLayerIndex] : null);
+            if (!piece || !piece.frames) return;
+            piece.currentFrame = (piece.currentFrame + 1) % piece.frames.length;
+            updateFramePreview();
+            renderCutPieces();
+            drawAssembly();
+        }
+
+        function togglePlayFrames() {
+            isPlaying = !isPlaying;
+            document.getElementById('playBtn').textContent = isPlaying ? 'Stop' : 'Play';
+            if (isPlaying) {
+                playInterval = setInterval(() => nextFrame(), 200);
+            } else {
+                clearInterval(playInterval);
+            }
+        }
+
+        // Assembly
+        function resizeAssembly() {
+            assemblyWidth = parseInt(document.getElementById('canvasWidth').value) || 1920;
+            assemblyHeight = parseInt(document.getElementById('canvasHeight').value) || 1080;
+            drawAssembly();
+        }
+
+        function drawAssembly() {
+            assemblyCanvas.width = assemblyWidth * assemblyZoom;
+            assemblyCanvas.height = assemblyHeight * assemblyZoom;
+            assemblyCtx.imageSmoothingEnabled = false;
+
+            // Draw onion skin (previous frames faded) - only when not playing
+            if (onionSkinEnabled && !isPlayingCanvas && currentCanvasFrame > 0) {
+                for (let i = onionSkinFrames; i >= 1; i--) {
+                    const frameIndex = currentCanvasFrame - i;
+                    if (frameIndex >= 0 && canvasFrames[frameIndex]) {
+                        // Progressive fade: further back = more faded
+                        assemblyCtx.globalAlpha = 0.15 / i;
+                        assemblyCtx.drawImage(
+                            canvasFrames[frameIndex],
+                            0, 0,
+                            assemblyWidth * assemblyZoom,
+                            assemblyHeight * assemblyZoom
+                        );
+                    }
+                }
+                assemblyCtx.globalAlpha = 1.0;
+            }
+
+            // Draw current canvas frame as background
+            if (canvasFrames[currentCanvasFrame]) {
+                assemblyCtx.drawImage(
+                    canvasFrames[currentCanvasFrame],
+                    0, 0,
+                    assemblyWidth * assemblyZoom,
+                    assemblyHeight * assemblyZoom
+                );
+            }
+
+            for (let i = 0; i < layers.length; i++) {
+                const layer = layers[i];
+                if (!layer.visible) continue;
+
+                const frame = layer.frames[layer.currentFrame || 0];
+
+                assemblyCtx.save();
+                const cx = (layer.x + layer.width / 2) * assemblyZoom;
+                const cy = (layer.y + layer.height / 2) * assemblyZoom;
+                assemblyCtx.translate(cx, cy);
+                assemblyCtx.rotate((layer.rotation || 0) * Math.PI / 180);
+                assemblyCtx.scale(layer.flipH ? -1 : 1, layer.flipV ? -1 : 1);
+                assemblyCtx.drawImage(
+                    frame,
+                    -layer.width * assemblyZoom / 2,
+                    -layer.height * assemblyZoom / 2,
+                    layer.width * assemblyZoom,
+                    layer.height * assemblyZoom
+                );
+                assemblyCtx.restore();
+
+                if (i === selectedLayerIndex) {
+                    assemblyCtx.strokeStyle = '#00ff00';
+                    assemblyCtx.lineWidth = 2;
+                    assemblyCtx.strokeRect(
+                        layer.x * assemblyZoom,
+                        layer.y * assemblyZoom,
+                        layer.width * assemblyZoom,
+                        layer.height * assemblyZoom
+                    );
+                }
+            }
+            renderLayers();
+        }
+
+        function renderLayers() {
+            const list = document.getElementById('layers-list');
+            list.innerHTML = '';
+            for (let i = layers.length - 1; i >= 0; i--) {
+                const layer = layers[i];
+                const div = document.createElement('div');
+                div.className = 'layer-item' + (i === selectedLayerIndex ? ' selected' : '') + (!layer.visible ? ' hidden' : '');
+                div.innerHTML = `${layer.visible ? '👁' : '👁‍🗨'} L${i + 1} ${layer.width}x${layer.height} ${layer.frames.length > 1 ? '[' + layer.frames.length + 'f]' : ''} ${layer.rotation ? layer.rotation + '°' : ''}`;
+                div.onclick = () => {
+                    selectedLayerIndex = i;
+                    selectedPieceIndex = -1;
+                    drawAssembly();
+                    updateFramePreview();
+                };
+                list.appendChild(div);
+            }
+        }
+
+        // Rotation and flip
+        function rotateLayer(deg) {
+            if (selectedLayerIndex < 0) return;
+            layers[selectedLayerIndex].rotation = ((layers[selectedLayerIndex].rotation || 0) + deg) % 360;
+            drawAssembly();
+        }
+
+        function flipLayerH() {
+            if (selectedLayerIndex < 0) return;
+            layers[selectedLayerIndex].flipH = !layers[selectedLayerIndex].flipH;
+            drawAssembly();
+        }
+
+        function flipLayerV() {
+            if (selectedLayerIndex < 0) return;
+            layers[selectedLayerIndex].flipV = !layers[selectedLayerIndex].flipV;
+            drawAssembly();
+        }
+
+        // Drag & drop
+        assemblyCanvas.addEventListener('dragover', (e) => e.preventDefault());
+
+        assemblyCanvas.addEventListener('drop', (e) => {
+            e.preventDefault();
+            if (!dragPiece) return;
+            const rect = assemblyCanvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / assemblyZoom);
+            const y = Math.floor((e.clientY - rect.top) / assemblyZoom);
+
+            layers.push({
+                id: Date.now(),
+                x: x - dragPiece.width / 2,
+                y: y - dragPiece.height / 2,
+                width: dragPiece.width,
+                height: dragPiece.height,
+                visible: true,
+                frames: dragPiece.frames,
+                currentFrame: 0,
+                rotation: 0,
+                flipH: false,
+                flipV: false
+            });
+            selectedLayerIndex = layers.length - 1;
+            dragPiece = null;
+            drawAssembly();
+            updateFramePreview();
+        });
+
+        assemblyCanvas.addEventListener('mousedown', (e) => {
+            const rect = assemblyCanvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / assemblyZoom;
+            const y = (e.clientY - rect.top) / assemblyZoom;
+
+            for (let i = layers.length - 1; i >= 0; i--) {
+                const layer = layers[i];
+                if (!layer.visible) continue;
+                if (x >= layer.x && x <= layer.x + layer.width &&
+                    y >= layer.y && y <= layer.y + layer.height) {
+                    selectedLayerIndex = i;
+                    selectedPieceIndex = -1;
+                    isDragging = true;
+                    dragOffset.x = x - layer.x;
+                    dragOffset.y = y - layer.y;
+                    drawAssembly();
+                    updateFramePreview();
+                    return;
+                }
+            }
+            selectedLayerIndex = -1;
+            drawAssembly();
+        });
+
+        assemblyCanvas.addEventListener('mousemove', (e) => {
+            if (!isDragging || selectedLayerIndex < 0) return;
+            const rect = assemblyCanvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / assemblyZoom;
+            const y = (e.clientY - rect.top) / assemblyZoom;
+            layers[selectedLayerIndex].x = Math.round(x - dragOffset.x);
+            layers[selectedLayerIndex].y = Math.round(y - dragOffset.y);
+            drawAssembly();
+        });
+
+        assemblyCanvas.addEventListener('mouseup', () => { isDragging = false; });
+        assemblyCanvas.addEventListener('mouseleave', () => { isDragging = false; });
+
+        // Layer controls
+        function moveLayerUp() {
+            if (selectedLayerIndex < 0 || selectedLayerIndex >= layers.length - 1) return;
+            [layers[selectedLayerIndex], layers[selectedLayerIndex + 1]] = [layers[selectedLayerIndex + 1], layers[selectedLayerIndex]];
+            selectedLayerIndex++;
+            drawAssembly();
+        }
+
+        function moveLayerDown() {
+            if (selectedLayerIndex <= 0) return;
+            [layers[selectedLayerIndex], layers[selectedLayerIndex - 1]] = [layers[selectedLayerIndex - 1], layers[selectedLayerIndex]];
+            selectedLayerIndex--;
+            drawAssembly();
+        }
+
+        function toggleLayerVisibility() {
+            if (selectedLayerIndex < 0) return;
+            layers[selectedLayerIndex].visible = !layers[selectedLayerIndex].visible;
+            drawAssembly();
+        }
+
+        function deleteSelected() {
+            if (selectedLayerIndex >= 0) {
+                layers.splice(selectedLayerIndex, 1);
+                selectedLayerIndex = -1;
+                drawAssembly();
+            } else if (selectedPieceIndex >= 0) {
+                cutPieces.splice(selectedPieceIndex, 1);
+                selectedPieceIndex = -1;
+                renderCutPieces();
+            }
+        }
+
+        function exportAssembly() {
+            const exportCanvas = document.createElement('canvas');
+            exportCanvas.width = assemblyWidth;
+            exportCanvas.height = assemblyHeight;
+            const ctx = exportCanvas.getContext('2d');
+
+            for (const layer of layers) {
+                if (!layer.visible) continue;
+                const frame = layer.frames[layer.currentFrame || 0];
+                ctx.save();
+                ctx.translate(layer.x + layer.width / 2, layer.y + layer.height / 2);
+                ctx.rotate((layer.rotation || 0) * Math.PI / 180);
+                ctx.scale(layer.flipH ? -1 : 1, layer.flipV ? -1 : 1);
+                ctx.drawImage(frame, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+                ctx.restore();
+            }
+
+            const link = document.createElement('a');
+            link.download = 'assembled-map.png';
+            link.href = exportCanvas.toDataURL('image/png');
+            link.click();
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (document.activeElement.tagName === 'INPUT') return;
+
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                deleteSelected();
+                e.preventDefault();
+            }
+            if (e.key === 'r' || e.key === 'R') {
+                rotateLayer(e.shiftKey ? -90 : 90);
+            }
+            if (e.key === 'h' || e.key === 'H') flipLayerH();
+            if (e.key === 'v' || e.key === 'V') flipLayerV();
+            if (e.key === ',' || e.key === '<') prevFrame();
+            if (e.key === '.' || e.key === '>') nextFrame();
+            if (e.key === ' ') { togglePlayFrames(); e.preventDefault(); }
+
+            if (selectedLayerIndex >= 0) {
+                const nudge = e.shiftKey ? 10 : 1;
+                if (e.key === 'ArrowUp') { layers[selectedLayerIndex].y -= nudge; drawAssembly(); e.preventDefault(); }
+                if (e.key === 'ArrowDown') { layers[selectedLayerIndex].y += nudge; drawAssembly(); e.preventDefault(); }
+                if (e.key === 'ArrowLeft') { layers[selectedLayerIndex].x -= nudge; drawAssembly(); e.preventDefault(); }
+                if (e.key === 'ArrowRight') { layers[selectedLayerIndex].x += nudge; drawAssembly(); e.preventDefault(); }
+            }
+        });
+
+        resizeAssembly();
+    </script>
+</body>
+</html>

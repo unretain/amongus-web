@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Lobby Spawn & Collision Debug</title>
+    <style>
+        body {
+            background: #1a1a2e;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 10px;
+        }
+        #controls {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 100;
+            background: rgba(0,0,0,0.8);
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 300px;
+        }
+        button {
+            padding: 8px 12px;
+            margin: 3px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        button.active {
+            outline: 3px solid #0ff;
+        }
+        .spawn-btn { background: #00ff00; color: #000; }
+        .spawn-btn.active { background: #00aa00; }
+        .collision-btn { background: #ff0000; color: #fff; }
+        .collision-btn.active { background: #aa0000; }
+        .walkable-btn { background: #0088ff; color: #fff; }
+        .walkable-btn.active { background: #0055aa; }
+        .eraser-btn { background: #888; color: #fff; }
+        .eraser-btn.active { background: #555; }
+        #canvas-container {
+            margin-top: 10px;
+            overflow: auto;
+            max-height: calc(100vh - 20px);
+        }
+        canvas {
+            display: block;
+            cursor: crosshair;
+        }
+        #output {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.9);
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 500px;
+            max-height: 300px;
+            overflow: auto;
+            font-family: monospace;
+            font-size: 11px;
+            white-space: pre;
+        }
+        #coords {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.8);
+            padding: 10px;
+            border-radius: 8px;
+            font-family: monospace;
+        }
+        .tool-section {
+            margin: 10px 0;
+            padding: 10px 0;
+            border-top: 1px solid #444;
+        }
+        .tool-section:first-child {
+            border-top: none;
+            padding-top: 0;
+        }
+        label {
+            display: block;
+            margin: 5px 0;
+        }
+        select {
+            padding: 5px;
+            margin: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <div class="tool-section">
+            <strong>Tools:</strong><br>
+            <button id="spawnBtn" class="spawn-btn active" onclick="setTool('spawn')">Spawn Point</button>
+            <button id="collisionBtn" class="collision-btn" onclick="setTool('collision')">Collision Box</button>
+            <button id="walkableBtn" class="walkable-btn" onclick="setTool('walkable')">Walkable Area</button>
+            <button id="eraserBtn" class="eraser-btn" onclick="setTool('eraser')">Eraser</button>
+        </div>
+
+        <div class="tool-section">
+            <strong>Spawn Point #:</strong>
+            <select id="spawnNumber">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+                <option value="7">7</option>
+                <option value="8">8</option>
+                <option value="9">9</option>
+                <option value="10">10</option>
+            </select>
+        </div>
+
+        <div class="tool-section">
+            <strong>Zoom:</strong>
+            <button onclick="setZoom(0.5)">0.5x</button>
+            <button onclick="setZoom(1)">1x</button>
+            <button onclick="setZoom(1.5)">1.5x</button>
+            <button onclick="setZoom(2)">2x</button>
+        </div>
+
+        <div class="tool-section">
+            <button onclick="undoLast()">Undo</button>
+            <button onclick="exportData()">Export JSON</button>
+            <button onclick="copyToClipboard()">Copy</button>
+            <br><br>
+            <button onclick="clearExceptSpawns()" style="background:#ff8800">Clear (Keep Spawns)</button>
+            <button onclick="clearAll()" style="background:#ff4444">Clear All</button>
+        </div>
+
+        <div class="tool-section">
+            <strong>Visibility:</strong><br>
+            <label><input type="checkbox" id="showSpawns" checked onchange="redraw()"> Spawn Points</label>
+            <label><input type="checkbox" id="showCollisions" checked onchange="redraw()"> Collisions</label>
+            <label><input type="checkbox" id="showWalkable" checked onchange="redraw()"> Walkable Areas</label>
+        </div>
+    </div>
+
+    <div id="coords">X: 0, Y: 0</div>
+
+    <div id="canvas-container">
+        <canvas id="mapCanvas"></canvas>
+        <canvas id="drawCanvas" style="position:absolute;top:0;left:0;pointer-events:none;"></canvas>
+    </div>
+
+    <div id="output">
+        // Export will appear here
+    </div>
+
+    <script>
+        const mapCanvas = document.getElementById('mapCanvas');
+        const mapCtx = mapCanvas.getContext('2d');
+        const drawCanvas = document.getElementById('drawCanvas');
+        const drawCtx = drawCanvas.getContext('2d');
+
+        let img = new Image();
+        let zoom = 1;
+        let tool = 'spawn';
+        let isDrawing = false;
+        let startX = 0, startY = 0;
+
+        // Data storage
+        let spawnPoints = [];
+        let collisionBoxes = [];
+        let walkableAreas = [];
+
+        // Load lobby frame
+        img.onload = function() {
+            resizeCanvases();
+            redraw();
+        };
+        img.src = '/assets/lobby/lobby-frame-1.png';
+
+        function resizeCanvases() {
+            const w = img.width * zoom;
+            const h = img.height * zoom;
+            mapCanvas.width = w;
+            mapCanvas.height = h;
+            drawCanvas.width = w;
+            drawCanvas.height = h;
+            drawCanvas.style.left = mapCanvas.offsetLeft + 'px';
+            drawCanvas.style.top = mapCanvas.offsetTop + 'px';
+        }
+
+        function setZoom(z) {
+            zoom = z;
+            resizeCanvases();
+            redraw();
+        }
+
+        function setTool(t) {
+            tool = t;
+            document.querySelectorAll('#controls button').forEach(b => b.classList.remove('active'));
+            document.getElementById(t + 'Btn').classList.add('active');
+            mapCanvas.style.cursor = t === 'eraser' ? 'pointer' : 'crosshair';
+        }
+
+        function redraw() {
+            // Draw map
+            mapCtx.imageSmoothingEnabled = false;
+            mapCtx.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
+            mapCtx.drawImage(img, 0, 0, mapCanvas.width, mapCanvas.height);
+
+            // Draw walkable areas (blue, behind everything)
+            if (document.getElementById('showWalkable').checked) {
+                walkableAreas.forEach(area => {
+                    mapCtx.fillStyle = 'rgba(0, 136, 255, 0.3)';
+                    mapCtx.fillRect(
+                        area.x * zoom, area.y * zoom,
+                        area.w * zoom, area.h * zoom
+                    );
+                    mapCtx.strokeStyle = '#0088ff';
+                    mapCtx.lineWidth = 2;
+                    mapCtx.strokeRect(
+                        area.x * zoom, area.y * zoom,
+                        area.w * zoom, area.h * zoom
+                    );
+                });
+            }
+
+            // Draw collision boxes (red)
+            if (document.getElementById('showCollisions').checked) {
+                collisionBoxes.forEach(box => {
+                    mapCtx.fillStyle = 'rgba(255, 0, 0, 0.4)';
+                    mapCtx.fillRect(
+                        box.x * zoom, box.y * zoom,
+                        box.w * zoom, box.h * zoom
+                    );
+                    mapCtx.strokeStyle = '#ff0000';
+                    mapCtx.lineWidth = 2;
+                    mapCtx.strokeRect(
+                        box.x * zoom, box.y * zoom,
+                        box.w * zoom, box.h * zoom
+                    );
+                });
+            }
+
+            // Draw spawn points (green circles with numbers)
+            if (document.getElementById('showSpawns').checked) {
+                spawnPoints.forEach(point => {
+                    mapCtx.beginPath();
+                    mapCtx.arc(point.x * zoom, point.y * zoom, 20 * zoom, 0, Math.PI * 2);
+                    mapCtx.fillStyle = 'rgba(0, 255, 0, 0.5)';
+                    mapCtx.fill();
+                    mapCtx.strokeStyle = '#00ff00';
+                    mapCtx.lineWidth = 3;
+                    mapCtx.stroke();
+
+                    // Draw number
+                    mapCtx.fillStyle = '#000';
+                    mapCtx.font = `bold ${16 * zoom}px Arial`;
+                    mapCtx.textAlign = 'center';
+                    mapCtx.textBaseline = 'middle';
+                    mapCtx.fillText(point.id, point.x * zoom, point.y * zoom);
+                });
+            }
+
+            // Clear draw canvas
+            drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+        }
+
+        // Mouse events
+        mapCanvas.addEventListener('mousedown', (e) => {
+            const rect = mapCanvas.getBoundingClientRect();
+            startX = Math.round((e.clientX - rect.left) / zoom);
+            startY = Math.round((e.clientY - rect.top) / zoom);
+            isDrawing = true;
+
+            if (tool === 'spawn') {
+                // Single click for spawn point
+                const spawnNum = parseInt(document.getElementById('spawnNumber').value);
+                // Remove existing spawn with same number
+                spawnPoints = spawnPoints.filter(p => p.id !== spawnNum);
+                spawnPoints.push({ id: spawnNum, x: startX, y: startY });
+                redraw();
+                isDrawing = false;
+            } else if (tool === 'eraser') {
+                // Find and remove nearest item
+                eraseAtPoint(startX, startY);
+                isDrawing = false;
+            }
+        });
+
+        mapCanvas.addEventListener('mousemove', (e) => {
+            const rect = mapCanvas.getBoundingClientRect();
+            const x = Math.round((e.clientX - rect.left) / zoom);
+            const y = Math.round((e.clientY - rect.top) / zoom);
+
+            document.getElementById('coords').textContent = `X: ${x}, Y: ${y}`;
+
+            if (isDrawing && (tool === 'collision' || tool === 'walkable')) {
+                drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+
+                const color = tool === 'collision' ? 'rgba(255,0,0,0.5)' : 'rgba(0,136,255,0.5)';
+                const strokeColor = tool === 'collision' ? '#ff0000' : '#0088ff';
+
+                drawCtx.fillStyle = color;
+                drawCtx.fillRect(
+                    startX * zoom, startY * zoom,
+                    (x - startX) * zoom, (y - startY) * zoom
+                );
+                drawCtx.strokeStyle = strokeColor;
+                drawCtx.lineWidth = 2;
+                drawCtx.strokeRect(
+                    startX * zoom, startY * zoom,
+                    (x - startX) * zoom, (y - startY) * zoom
+                );
+            }
+        });
+
+        mapCanvas.addEventListener('mouseup', (e) => {
+            if (!isDrawing) return;
+
+            const rect = mapCanvas.getBoundingClientRect();
+            const endX = Math.round((e.clientX - rect.left) / zoom);
+            const endY = Math.round((e.clientY - rect.top) / zoom);
+
+            if (tool === 'collision') {
+                const box = {
+                    x: Math.min(startX, endX),
+                    y: Math.min(startY, endY),
+                    w: Math.abs(endX - startX),
+                    h: Math.abs(endY - startY)
+                };
+                if (box.w > 5 && box.h > 5) {
+                    collisionBoxes.push(box);
+                }
+            } else if (tool === 'walkable') {
+                const area = {
+                    x: Math.min(startX, endX),
+                    y: Math.min(startY, endY),
+                    w: Math.abs(endX - startX),
+                    h: Math.abs(endY - startY)
+                };
+                if (area.w > 5 && area.h > 5) {
+                    walkableAreas.push(area);
+                }
+            }
+
+            isDrawing = false;
+            redraw();
+        });
+
+        function eraseAtPoint(x, y) {
+            const tolerance = 20;
+
+            // Check spawn points
+            for (let i = spawnPoints.length - 1; i >= 0; i--) {
+                const p = spawnPoints[i];
+                const dist = Math.sqrt(Math.pow(x - p.x, 2) + Math.pow(y - p.y, 2));
+                if (dist < tolerance) {
+                    spawnPoints.splice(i, 1);
+                    redraw();
+                    return;
+                }
+            }
+
+            // Check collision boxes
+            for (let i = collisionBoxes.length - 1; i >= 0; i--) {
+                const box = collisionBoxes[i];
+                if (x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h) {
+                    collisionBoxes.splice(i, 1);
+                    redraw();
+                    return;
+                }
+            }
+
+            // Check walkable areas
+            for (let i = walkableAreas.length - 1; i >= 0; i--) {
+                const area = walkableAreas[i];
+                if (x >= area.x && x <= area.x + area.w && y >= area.y && y <= area.y + area.h) {
+                    walkableAreas.splice(i, 1);
+                    redraw();
+                    return;
+                }
+            }
+        }
+
+        function clearAll() {
+            if (confirm('Clear all spawn points, collisions, and walkable areas?')) {
+                spawnPoints = [];
+                collisionBoxes = [];
+                walkableAreas = [];
+                redraw();
+            }
+        }
+
+        function clearExceptSpawns() {
+            if (confirm('Clear collisions and walkable areas (keeping spawn points)?')) {
+                collisionBoxes = [];
+                walkableAreas = [];
+                redraw();
+            }
+        }
+
+        function undoLast() {
+            // Remove most recent item from any array
+            if (spawnPoints.length > 0 || collisionBoxes.length > 0 || walkableAreas.length > 0) {
+                // Find which was added most recently (simple approach: just pop from each)
+                if (walkableAreas.length > 0) walkableAreas.pop();
+                else if (collisionBoxes.length > 0) collisionBoxes.pop();
+                else if (spawnPoints.length > 0) spawnPoints.pop();
+                redraw();
+            }
+        }
+
+        function exportData() {
+            const data = {
+                mapWidth: img.width,
+                mapHeight: img.height,
+                spawnPoints: spawnPoints.sort((a, b) => a.id - b.id),
+                collisionBoxes: collisionBoxes,
+                walkableAreas: walkableAreas
+            };
+
+            const json = JSON.stringify(data, null, 2);
+            document.getElementById('output').textContent = json;
+        }
+
+        function copyToClipboard() {
+            exportData();
+            const text = document.getElementById('output').textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Copied to clipboard!');
+            });
+        }
+
+        // Initialize
+        redraw();
+    </script>
+</body>
+</html>

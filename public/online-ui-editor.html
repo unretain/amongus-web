@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Online Screen UI Editor</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            background: #1a1a2e;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #main-container {
+            display: flex;
+            gap: 20px;
+        }
+        #source-panel {
+            flex: 0 0 520px;
+            background: rgba(0,0,0,0.5);
+            padding: 15px;
+            border-radius: 8px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        #screen-panel {
+            flex: 1;
+            background: rgba(0,0,0,0.5);
+            padding: 15px;
+            border-radius: 8px;
+        }
+        canvas {
+            border: 1px solid #444;
+            display: block;
+        }
+        #source-wrapper {
+            position: relative;
+            display: inline-block;
+            overflow: auto;
+            max-width: 100%;
+            max-height: 400px;
+        }
+        #source-canvas {
+            cursor: crosshair;
+        }
+        #screen-canvas {
+            cursor: pointer;
+        }
+        #selection-overlay {
+            position: absolute;
+            border: 2px dashed #0f0;
+            background: rgba(0, 255, 0, 0.2);
+            pointer-events: none;
+        }
+        #selection-overlay.circle {
+            border-radius: 50%;
+        }
+        .controls {
+            margin: 10px 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            align-items: center;
+        }
+        button {
+            background: #4a4a6a;
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            margin: 2px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover { background: #6a6a8a; }
+        button.active { background: #8a8aaa; }
+        button.success { background: #4a8a4a; }
+        button.danger { background: #8a4a4a; }
+        #sprite-list {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #444;
+            padding: 5px;
+            margin: 10px 0;
+        }
+        .sprite-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px;
+            border-bottom: 1px solid #333;
+            cursor: grab;
+            user-select: none;
+        }
+        .sprite-item:hover { background: rgba(255,255,255,0.1); }
+        .sprite-item.selected { background: rgba(100,100,255,0.3); }
+        .sprite-item canvas {
+            border: 1px solid #555;
+            flex-shrink: 0;
+        }
+        .sprite-item input {
+            width: 70px;
+            padding: 3px;
+            background: #333;
+            border: 1px solid #555;
+            color: #fff;
+            border-radius: 3px;
+        }
+        .sprite-info {
+            color: #888;
+            font-size: 11px;
+            white-space: nowrap;
+        }
+        #coords {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.9);
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            z-index: 100;
+        }
+        #placed-list {
+            max-height: 150px;
+            overflow-y: auto;
+            border: 1px solid #444;
+            padding: 5px;
+            margin: 10px 0;
+        }
+        .placed-item {
+            padding: 5px;
+            border-bottom: 1px solid #333;
+            cursor: pointer;
+            font-size: 12px;
+            font-family: monospace;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .placed-item:hover { background: rgba(255,255,255,0.1); }
+        .placed-item.selected { background: rgba(100,255,100,0.3); }
+        .placed-item input {
+            width: 50px;
+            padding: 2px 4px;
+            background: #333;
+            border: 1px solid #555;
+            color: #fff;
+            border-radius: 3px;
+            font-size: 11px;
+        }
+        #instructions {
+            background: rgba(0,0,0,0.5);
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 13px;
+        }
+        h3, h4 { margin: 10px 0 5px 0; }
+        .snap-line {
+            position: absolute;
+            background: rgba(255, 255, 0, 0.7);
+            pointer-events: none;
+            z-index: 50;
+        }
+        .snap-line.horizontal {
+            height: 1px;
+            left: 0;
+            right: 0;
+        }
+        .snap-line.vertical {
+            width: 1px;
+            top: 0;
+            bottom: 0;
+        }
+        label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 12px;
+        }
+        #line-controls {
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 5px;
+        }
+        #line-controls input[type="number"] {
+            width: 60px;
+            padding: 4px;
+            background: #333;
+            border: 1px solid #555;
+            color: #fff;
+            border-radius: 3px;
+        }
+        #line-controls input[type="color"] {
+            width: 40px;
+            height: 25px;
+            border: none;
+            cursor: pointer;
+        }
+        #nineslice-controls {
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 5px;
+        }
+        #nineslice-controls input[type="number"] {
+            width: 60px;
+            padding: 4px;
+            background: #333;
+            border: 1px solid #555;
+            color: #fff;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div id="instructions">
+        <strong>Online Screen UI Editor</strong> -
+        1) Select region (rect/circle), click "Cut" |
+        2) Drag sprite to screen or click to place |
+        3) Drag placed sprites to move (snaps to alignment) |
+        4) Resize with scale inputs |
+        5) Add lines with Line Tool |
+        6) Delete key removes selected |
+        7) Export JSON
+    </div>
+
+    <div id="main-container">
+        <div id="source-panel">
+            <h3 id="source-title">Source: GUI Buttons</h3>
+            <div class="controls">
+                <button id="btn-buttons" class="active" onclick="switchSheet('buttons')">Buttons</button>
+                <button id="btn-mainmenu" onclick="switchSheet('mainmenu')">Main Menu</button>
+                <span style="margin-left:15px;">|</span>
+                <button id="btn-rect" class="active" onclick="setCropMode('rect')">Rect</button>
+                <button id="btn-circle" onclick="setCropMode('circle')">Circle</button>
+            </div>
+
+            <div id="source-wrapper">
+                <canvas id="source-canvas"></canvas>
+                <div id="selection-overlay" style="display:none;"></div>
+            </div>
+
+            <div class="controls">
+                <button class="success" onclick="cutSelection()">Cut Selection</button>
+                <span id="sel-info" style="margin-left:10px;color:#888;"></span>
+            </div>
+
+            <h4>Cut Sprites (drag to screen):</h4>
+            <div id="sprite-list"></div>
+            <button class="danger" onclick="removeSprite()">Remove Selected Sprite</button>
+
+            <div id="line-controls">
+                <h4>Line Tool</h4>
+                <div class="controls">
+                    <label>Width: <input type="number" id="line-width" value="200" min="10" max="1000"></label>
+                    <label>Height: <input type="number" id="line-height" value="8" min="2" max="100"></label>
+                    <label>Radius: <input type="number" id="line-radius" value="4" min="0" max="50"></label>
+                    <label>Color: <input type="color" id="line-color" value="#ffffff"></label>
+                    <button class="success" onclick="addLine()">Add Line</button>
+                </div>
+            </div>
+
+            <div id="nineslice-controls">
+                <h4>9-Slice Backer Tool</h4>
+                <p style="font-size:11px;color:#888;margin:5px 0;">Cut a backer sprite first, then set corner size and target dimensions</p>
+                <div class="controls">
+                    <label>Corner: <input type="number" id="ns-corner" value="20" min="5" max="100"></label>
+                    <label>Width: <input type="number" id="ns-width" value="200" min="20" max="800"></label>
+                    <label>Height: <input type="number" id="ns-height" value="80" min="20" max="400"></label>
+                    <button class="success" onclick="create9Slice()">Create 9-Slice</button>
+                </div>
+                <div class="controls" style="margin-top:5px;">
+                    <button onclick="preset9Slice('backer1')">Backer 1 (108x110)</button>
+                    <button onclick="preset9Slice('backer2')">Backer 2 (56x56)</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="screen-panel">
+            <h3>Online Screen Preview</h3>
+            <div style="position:relative;display:inline-block;">
+                <canvas id="screen-canvas"></canvas>
+                <div id="snap-h" class="snap-line horizontal" style="display:none;"></div>
+                <div id="snap-v" class="snap-line vertical" style="display:none;"></div>
+            </div>
+
+            <h4>Placed Sprites:</h4>
+            <div id="placed-list"></div>
+            <div class="controls">
+                <button class="danger" onclick="removePlaced()">Remove Selected</button>
+                <button class="success" onclick="exportJSON()">Export JSON</button>
+                <label style="margin-left:15px;">
+                    <input type="checkbox" id="snap-enabled" checked> Snap
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div id="coords">Ready</div>
+
+    <script>
+        // Canvas setup
+        const srcCanvas = document.getElementById('source-canvas');
+        const srcCtx = srcCanvas.getContext('2d');
+        const screenCanvas = document.getElementById('screen-canvas');
+        const screenCtx = screenCanvas.getContext('2d');
+        const selOverlay = document.getElementById('selection-overlay');
+        const coordsDiv = document.getElementById('coords');
+        const selInfo = document.getElementById('sel-info');
+        const snapH = document.getElementById('snap-h');
+        const snapV = document.getElementById('snap-v');
+
+        // Images
+        const srcImg = new Image();
+        const starsImg = new Image();
+
+        // State
+        let currentSheet = 'buttons';
+        const sheets = {
+            buttons: '/assets/gui/Buttons-sharedassets0.assets-73.png',
+            mainmenu: '/assets/gui/MainMenu-sharedassets0.assets-189.png'
+        };
+
+        let srcZoom = 2;
+        let screenZoom = 0.6;
+        const SCREEN_W = 1920;
+        const SCREEN_H = 1080;
+        const SNAP_THRESHOLD = 8;
+
+        // Crop mode
+        let cropMode = 'rect'; // 'rect' or 'circle'
+
+        // Selection
+        let selecting = false;
+        let selStart = {x:0, y:0};
+        let selEnd = {x:0, y:0};
+
+        // Sprites (includes cut images and generated lines)
+        let sprites = [];
+        let selectedSprite = -1;
+
+        // Placed
+        let placed = [];
+        let selectedPlaced = -1;
+        let draggingPlaced = false;
+        let dragOff = {x:0, y:0};
+
+        // Load images with error handling
+        srcImg.onload = () => {
+            console.log('Buttons sheet loaded:', srcImg.width, 'x', srcImg.height);
+            drawSource();
+        };
+        srcImg.onerror = (e) => {
+            console.error('Failed to load buttons sheet:', sheets.buttons);
+            alert('Failed to load buttons sheet. Make sure you are running this through a local server (not file://)');
+        };
+        srcImg.src = sheets.buttons;
+
+        starsImg.onload = () => {
+            console.log('Stars bg loaded');
+            drawScreen();
+        };
+        starsImg.onerror = (e) => {
+            console.error('Failed to load stars bg');
+            drawScreen();
+        };
+        starsImg.src = '/assets/stars-bg.png';
+
+        function switchSheet(sheet) {
+            currentSheet = sheet;
+            document.getElementById('btn-buttons').classList.toggle('active', sheet === 'buttons');
+            document.getElementById('btn-mainmenu').classList.toggle('active', sheet === 'mainmenu');
+            document.getElementById('source-title').textContent = 'Source: ' + (sheet === 'buttons' ? 'GUI Buttons' : 'Main Menu');
+            srcZoom = sheet === 'mainmenu' ? 1 : 2;
+            srcImg.src = sheets[sheet];
+            hideSelection();
+        }
+
+        function setCropMode(mode) {
+            cropMode = mode;
+            document.getElementById('btn-rect').classList.toggle('active', mode === 'rect');
+            document.getElementById('btn-circle').classList.toggle('active', mode === 'circle');
+            selOverlay.classList.toggle('circle', mode === 'circle');
+        }
+
+        function drawSource() {
+            srcCanvas.width = srcImg.width * srcZoom;
+            srcCanvas.height = srcImg.height * srcZoom;
+            srcCtx.imageSmoothingEnabled = false;
+            srcCtx.drawImage(srcImg, 0, 0, srcCanvas.width, srcCanvas.height);
+        }
+
+        function drawScreen() {
+            screenCanvas.width = SCREEN_W * screenZoom;
+            screenCanvas.height = SCREEN_H * screenZoom;
+            screenCtx.imageSmoothingEnabled = false;
+
+            // Black bg
+            screenCtx.fillStyle = '#000';
+            screenCtx.fillRect(0, 0, screenCanvas.width, screenCanvas.height);
+
+            // Stars
+            if (starsImg.complete && starsImg.width) {
+                for (let x = 0; x < SCREEN_W; x += starsImg.width) {
+                    for (let y = 0; y < SCREEN_H; y += starsImg.height) {
+                        screenCtx.drawImage(starsImg,
+                            x * screenZoom, y * screenZoom,
+                            starsImg.width * screenZoom, starsImg.height * screenZoom);
+                    }
+                }
+            }
+
+            // Draw placed sprites
+            placed.forEach((p, i) => {
+                const spr = sprites[p.spriteIdx];
+                if (!spr) return;
+
+                const drawW = spr.w * p.scaleX;
+                const drawH = spr.h * p.scaleY;
+
+                screenCtx.save();
+                if (spr.isCircle) {
+                    // Circle clip for display
+                    screenCtx.beginPath();
+                    screenCtx.arc(
+                        (p.x + drawW/2) * screenZoom,
+                        (p.y + drawH/2) * screenZoom,
+                        Math.min(drawW, drawH)/2 * screenZoom,
+                        0, Math.PI * 2
+                    );
+                    screenCtx.clip();
+                }
+
+                screenCtx.drawImage(spr.canvas,
+                    0, 0, spr.w, spr.h,
+                    p.x * screenZoom, p.y * screenZoom,
+                    drawW * screenZoom, drawH * screenZoom);
+                screenCtx.restore();
+
+                if (i === selectedPlaced) {
+                    screenCtx.strokeStyle = '#0f0';
+                    screenCtx.lineWidth = 2;
+                    if (spr.isCircle) {
+                        screenCtx.beginPath();
+                        screenCtx.arc(
+                            (p.x + drawW/2) * screenZoom,
+                            (p.y + drawH/2) * screenZoom,
+                            Math.min(drawW, drawH)/2 * screenZoom,
+                            0, Math.PI * 2
+                        );
+                        screenCtx.stroke();
+                    } else {
+                        screenCtx.strokeRect(p.x * screenZoom, p.y * screenZoom, drawW * screenZoom, drawH * screenZoom);
+                    }
+                }
+            });
+
+            updatePlacedList();
+        }
+
+        // Source canvas - selection
+        srcCanvas.addEventListener('mousedown', e => {
+            const r = srcCanvas.getBoundingClientRect();
+            selStart.x = Math.floor((e.clientX - r.left) / srcZoom);
+            selStart.y = Math.floor((e.clientY - r.top) / srcZoom);
+            selEnd.x = selStart.x;
+            selEnd.y = selStart.y;
+            selecting = true;
+            showSelection();
+        });
+
+        srcCanvas.addEventListener('mousemove', e => {
+            const r = srcCanvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - r.left) / srcZoom);
+            const y = Math.floor((e.clientY - r.top) / srcZoom);
+            coordsDiv.textContent = `Source: ${x}, ${y}`;
+
+            if (selecting) {
+                selEnd.x = Math.max(0, Math.min(x, srcImg.width));
+                selEnd.y = Math.max(0, Math.min(y, srcImg.height));
+                showSelection();
+            }
+        });
+
+        srcCanvas.addEventListener('mouseup', () => selecting = false);
+        srcCanvas.addEventListener('mouseleave', () => selecting = false);
+
+        function showSelection() {
+            const x1 = Math.min(selStart.x, selEnd.x);
+            const y1 = Math.min(selStart.y, selEnd.y);
+            const x2 = Math.max(selStart.x, selEnd.x);
+            const y2 = Math.max(selStart.y, selEnd.y);
+            const w = x2 - x1;
+            const h = y2 - y1;
+
+            selOverlay.style.display = 'block';
+            selOverlay.style.left = (x1 * srcZoom) + 'px';
+            selOverlay.style.top = (y1 * srcZoom) + 'px';
+            selOverlay.style.width = (w * srcZoom) + 'px';
+            selOverlay.style.height = (h * srcZoom) + 'px';
+
+            selInfo.textContent = w > 0 && h > 0 ? `${x1},${y1} ${w}x${h}` : '';
+        }
+
+        function hideSelection() {
+            selOverlay.style.display = 'none';
+            selInfo.textContent = '';
+        }
+
+        function cutSelection() {
+            const x1 = Math.min(selStart.x, selEnd.x);
+            const y1 = Math.min(selStart.y, selEnd.y);
+            const w = Math.abs(selEnd.x - selStart.x);
+            const h = Math.abs(selEnd.y - selStart.y);
+            if (w < 2 || h < 2) return;
+
+            const c = document.createElement('canvas');
+            c.width = w;
+            c.height = h;
+            const ctx = c.getContext('2d');
+
+            if (cropMode === 'circle') {
+                // Circle crop - clip to ellipse
+                ctx.beginPath();
+                ctx.ellipse(w/2, h/2, w/2, h/2, 0, 0, Math.PI * 2);
+                ctx.clip();
+            }
+
+            ctx.drawImage(srcImg, x1, y1, w, h, 0, 0, w, h);
+
+            sprites.push({
+                name: 'sprite_' + (sprites.length + 1),
+                sheet: currentSheet,
+                sx: x1, sy: y1, w, h,
+                canvas: c,
+                isCircle: cropMode === 'circle',
+                isLine: false
+            });
+
+            updateSpriteList();
+            hideSelection();
+        }
+
+        function addLine() {
+            const w = parseInt(document.getElementById('line-width').value) || 200;
+            const h = parseInt(document.getElementById('line-height').value) || 8;
+            const radius = parseInt(document.getElementById('line-radius').value) || 4;
+            const color = document.getElementById('line-color').value || '#ffffff';
+
+            const c = document.createElement('canvas');
+            c.width = w;
+            c.height = h;
+            const ctx = c.getContext('2d');
+
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.roundRect(0, 0, w, h, radius);
+            ctx.fill();
+
+            sprites.push({
+                name: 'line_' + (sprites.length + 1),
+                sheet: 'generated',
+                sx: 0, sy: 0, w, h,
+                canvas: c,
+                isCircle: false,
+                isLine: true,
+                lineColor: color,
+                lineRadius: radius
+            });
+
+            updateSpriteList();
+        }
+
+        // Preset 9-slice for known backers
+        function preset9Slice(type) {
+            if (type === 'backer1') {
+                // backer_1: buttons sheet (1262, 110) 108x110
+                create9SliceFromSource('buttons', 1262, 110, 108, 110, 25);
+            } else if (type === 'backer2') {
+                // backer_2: buttons sheet (303, 120) 56x56
+                create9SliceFromSource('buttons', 303, 120, 56, 56, 15);
+            }
+        }
+
+        function create9SliceFromSource(sheet, sx, sy, sw, sh, defaultCorner) {
+            // Load the source image
+            const img = new Image();
+            img.onload = () => {
+                const targetW = parseInt(document.getElementById('ns-width').value) || 200;
+                const targetH = parseInt(document.getElementById('ns-height').value) || 80;
+                const corner = parseInt(document.getElementById('ns-corner').value) || defaultCorner;
+
+                const c = document.createElement('canvas');
+                c.width = targetW;
+                c.height = targetH;
+                const ctx = c.getContext('2d');
+
+                draw9Slice(ctx, img, sx, sy, sw, sh, 0, 0, targetW, targetH, corner);
+
+                sprites.push({
+                    name: 'backer_9s_' + (sprites.length + 1),
+                    sheet: 'generated',
+                    sx: 0, sy: 0, w: targetW, h: targetH,
+                    canvas: c,
+                    isCircle: false,
+                    isLine: false,
+                    is9Slice: true,
+                    sourceSheet: sheet,
+                    sourceSx: sx, sourceSy: sy, sourceSw: sw, sourceSh: sh,
+                    cornerSize: corner
+                });
+
+                updateSpriteList();
+            };
+            img.src = sheets[sheet];
+        }
+
+        function create9Slice() {
+            // Use currently selected sprite as source
+            if (selectedSprite < 0) {
+                alert('Select a sprite first to use as 9-slice source');
+                return;
+            }
+
+            const source = sprites[selectedSprite];
+            if (source.isLine || source.is9Slice) {
+                alert('Cannot 9-slice a line or already 9-sliced sprite. Use a cut sprite.');
+                return;
+            }
+
+            const targetW = parseInt(document.getElementById('ns-width').value) || 200;
+            const targetH = parseInt(document.getElementById('ns-height').value) || 80;
+            const corner = parseInt(document.getElementById('ns-corner').value) || 20;
+
+            const c = document.createElement('canvas');
+            c.width = targetW;
+            c.height = targetH;
+            const ctx = c.getContext('2d');
+
+            // Use the source sprite's canvas for 9-slice
+            draw9SliceFromCanvas(ctx, source.canvas, 0, 0, source.w, source.h, 0, 0, targetW, targetH, corner);
+
+            sprites.push({
+                name: source.name + '_9s',
+                sheet: 'generated',
+                sx: 0, sy: 0, w: targetW, h: targetH,
+                canvas: c,
+                isCircle: false,
+                isLine: false,
+                is9Slice: true,
+                sourceSheet: source.sheet,
+                sourceSx: source.sx, sourceSy: source.sy, sourceSw: source.w, sourceSh: source.h,
+                cornerSize: corner
+            });
+
+            updateSpriteList();
+        }
+
+        // 9-slice drawing from image
+        function draw9Slice(ctx, img, sx, sy, sw, sh, dx, dy, dw, dh, cs) {
+            // Clamp corner size
+            const maxCorner = Math.min(sw / 2, sh / 2, dw / 2, dh / 2);
+            const c = Math.min(cs, maxCorner);
+
+            // Corners
+            ctx.drawImage(img, sx, sy, c, c, dx, dy, c, c); // TL
+            ctx.drawImage(img, sx + sw - c, sy, c, c, dx + dw - c, dy, c, c); // TR
+            ctx.drawImage(img, sx, sy + sh - c, c, c, dx, dy + dh - c, c, c); // BL
+            ctx.drawImage(img, sx + sw - c, sy + sh - c, c, c, dx + dw - c, dy + dh - c, c, c); // BR
+
+            // Edges
+            ctx.drawImage(img, sx + c, sy, sw - c * 2, c, dx + c, dy, dw - c * 2, c); // Top
+            ctx.drawImage(img, sx + c, sy + sh - c, sw - c * 2, c, dx + c, dy + dh - c, dw - c * 2, c); // Bottom
+            ctx.drawImage(img, sx, sy + c, c, sh - c * 2, dx, dy + c, c, dh - c * 2); // Left
+            ctx.drawImage(img, sx + sw - c, sy + c, c, sh - c * 2, dx + dw - c, dy + c, c, dh - c * 2); // Right
+
+            // Center
+            ctx.drawImage(img, sx + c, sy + c, sw - c * 2, sh - c * 2, dx + c, dy + c, dw - c * 2, dh - c * 2);
+        }
+
+        // 9-slice drawing from canvas
+        function draw9SliceFromCanvas(ctx, srcCanvas, sx, sy, sw, sh, dx, dy, dw, dh, cs) {
+            const maxCorner = Math.min(sw / 2, sh / 2, dw / 2, dh / 2);
+            const c = Math.min(cs, maxCorner);
+
+            // Corners
+            ctx.drawImage(srcCanvas, sx, sy, c, c, dx, dy, c, c);
+            ctx.drawImage(srcCanvas, sx + sw - c, sy, c, c, dx + dw - c, dy, c, c);
+            ctx.drawImage(srcCanvas, sx, sy + sh - c, c, c, dx, dy + dh - c, c, c);
+            ctx.drawImage(srcCanvas, sx + sw - c, sy + sh - c, c, c, dx + dw - c, dy + dh - c, c, c);
+
+            // Edges
+            ctx.drawImage(srcCanvas, sx + c, sy, sw - c * 2, c, dx + c, dy, dw - c * 2, c);
+            ctx.drawImage(srcCanvas, sx + c, sy + sh - c, sw - c * 2, c, dx + c, dy + dh - c, dw - c * 2, c);
+            ctx.drawImage(srcCanvas, sx, sy + c, c, sh - c * 2, dx, dy + c, c, dh - c * 2);
+            ctx.drawImage(srcCanvas, sx + sw - c, sy + c, c, sh - c * 2, dx + dw - c, dy + c, c, dh - c * 2);
+
+            // Center
+            ctx.drawImage(srcCanvas, sx + c, sy + c, sw - c * 2, sh - c * 2, dx + c, dy + c, dw - c * 2, dh - c * 2);
+        }
+
+        function updateSpriteList() {
+            const list = document.getElementById('sprite-list');
+            list.innerHTML = '';
+
+            sprites.forEach((spr, i) => {
+                const div = document.createElement('div');
+                div.className = 'sprite-item' + (i === selectedSprite ? ' selected' : '');
+                div.draggable = true;
+
+                div.ondragstart = e => {
+                    e.dataTransfer.setData('text/plain', i.toString());
+                    e.dataTransfer.effectAllowed = 'copy';
+                    selectedSprite = i;
+                    updateSpriteList();
+                };
+
+                div.onclick = () => {
+                    selectedSprite = i;
+                    updateSpriteList();
+                };
+
+                // Preview
+                const preview = document.createElement('canvas');
+                const maxSize = 40;
+                const scale = Math.min(maxSize / spr.w, maxSize / spr.h, 1);
+                preview.width = Math.max(spr.w * scale, 10);
+                preview.height = Math.max(spr.h * scale, 10);
+                const pctx = preview.getContext('2d');
+                if (spr.isCircle) {
+                    pctx.beginPath();
+                    pctx.arc(preview.width/2, preview.height/2, Math.min(preview.width, preview.height)/2, 0, Math.PI*2);
+                    pctx.clip();
+                }
+                pctx.drawImage(spr.canvas, 0, 0, preview.width, preview.height);
+
+                // Name input
+                const input = document.createElement('input');
+                input.value = spr.name;
+                input.onchange = e => spr.name = e.target.value;
+                input.onclick = e => e.stopPropagation();
+                input.draggable = false;
+
+                // Info
+                const info = document.createElement('span');
+                info.className = 'sprite-info';
+                const sheetLabel = spr.isLine ? 'Line' : (spr.sheet === 'mainmenu' ? 'MM' : 'Btn');
+                const shapeLabel = spr.isCircle ? ' ◯' : '';
+                info.textContent = `${spr.w}x${spr.h} [${sheetLabel}]${shapeLabel}`;
+
+                div.appendChild(preview);
+                div.appendChild(input);
+                div.appendChild(info);
+                list.appendChild(div);
+            });
+        }
+
+        function removeSprite() {
+            if (selectedSprite < 0) return;
+            placed = placed.filter(p => p.spriteIdx !== selectedSprite);
+            placed.forEach(p => { if (p.spriteIdx > selectedSprite) p.spriteIdx--; });
+            sprites.splice(selectedSprite, 1);
+            selectedSprite = -1;
+            updateSpriteList();
+            drawScreen();
+        }
+
+        // Snapping logic
+        function getSnapPoints() {
+            const points = [];
+            // Screen center
+            points.push({ x: SCREEN_W / 2, y: SCREEN_H / 2, type: 'center' });
+
+            // All placed sprites edges and centers
+            placed.forEach((p, i) => {
+                if (i === selectedPlaced) return;
+                const spr = sprites[p.spriteIdx];
+                if (!spr) return;
+                const w = spr.w * p.scaleX;
+                const h = spr.h * p.scaleY;
+
+                points.push({ x: p.x, y: p.y, type: 'corner' });
+                points.push({ x: p.x + w, y: p.y, type: 'corner' });
+                points.push({ x: p.x, y: p.y + h, type: 'corner' });
+                points.push({ x: p.x + w, y: p.y + h, type: 'corner' });
+                points.push({ x: p.x + w/2, y: p.y + h/2, type: 'center' });
+                points.push({ x: p.x + w/2, y: p.y, type: 'edge' });
+                points.push({ x: p.x + w/2, y: p.y + h, type: 'edge' });
+                points.push({ x: p.x, y: p.y + h/2, type: 'edge' });
+                points.push({ x: p.x + w, y: p.y + h/2, type: 'edge' });
+            });
+
+            return points;
+        }
+
+        function applySnapping(p) {
+            if (!document.getElementById('snap-enabled').checked) {
+                snapH.style.display = 'none';
+                snapV.style.display = 'none';
+                return;
+            }
+
+            const spr = sprites[p.spriteIdx];
+            if (!spr) return;
+
+            const w = spr.w * p.scaleX;
+            const h = spr.h * p.scaleY;
+            const myPoints = [
+                { x: p.x, y: p.y },
+                { x: p.x + w, y: p.y },
+                { x: p.x, y: p.y + h },
+                { x: p.x + w, y: p.y + h },
+                { x: p.x + w/2, y: p.y + h/2 },
+                { x: p.x + w/2, y: p.y },
+                { x: p.x + w/2, y: p.y + h },
+                { x: p.x, y: p.y + h/2 },
+                { x: p.x + w, y: p.y + h/2 },
+            ];
+
+            const targets = getSnapPoints();
+            let snapX = null, snapY = null;
+            let snapLineX = null, snapLineY = null;
+
+            for (const my of myPoints) {
+                for (const t of targets) {
+                    if (snapX === null && Math.abs(my.x - t.x) < SNAP_THRESHOLD) {
+                        const diff = t.x - my.x;
+                        p.x += diff;
+                        snapX = t.x;
+                        snapLineX = t.x;
+                    }
+                    if (snapY === null && Math.abs(my.y - t.y) < SNAP_THRESHOLD) {
+                        const diff = t.y - my.y;
+                        p.y += diff;
+                        snapY = t.y;
+                        snapLineY = t.y;
+                    }
+                }
+                if (snapX !== null && snapY !== null) break;
+            }
+
+            // Show snap lines
+            if (snapLineX !== null) {
+                snapV.style.display = 'block';
+                snapV.style.left = (snapLineX * screenZoom) + 'px';
+            } else {
+                snapV.style.display = 'none';
+            }
+
+            if (snapLineY !== null) {
+                snapH.style.display = 'block';
+                snapH.style.top = (snapLineY * screenZoom) + 'px';
+            } else {
+                snapH.style.display = 'none';
+            }
+        }
+
+        // Screen canvas - drag & drop and clicking
+        screenCanvas.addEventListener('dragover', e => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+        });
+
+        screenCanvas.addEventListener('drop', e => {
+            e.preventDefault();
+            const idx = parseInt(e.dataTransfer.getData('text/plain'));
+            if (isNaN(idx) || !sprites[idx]) return;
+
+            const r = screenCanvas.getBoundingClientRect();
+            const x = Math.round((e.clientX - r.left) / screenZoom - sprites[idx].w / 2);
+            const y = Math.round((e.clientY - r.top) / screenZoom - sprites[idx].h / 2);
+
+            placed.push({ spriteIdx: idx, x, y, scaleX: 1, scaleY: 1 });
+            selectedPlaced = placed.length - 1;
+            drawScreen();
+        });
+
+        screenCanvas.addEventListener('mousedown', e => {
+            const r = screenCanvas.getBoundingClientRect();
+            const mx = (e.clientX - r.left) / screenZoom;
+            const my = (e.clientY - r.top) / screenZoom;
+
+            coordsDiv.textContent = `Screen: ${Math.round(mx)}, ${Math.round(my)}`;
+
+            // Check if clicking on placed sprite (reverse order for top-most)
+            for (let i = placed.length - 1; i >= 0; i--) {
+                const p = placed[i];
+                const spr = sprites[p.spriteIdx];
+                if (!spr) continue;
+                const w = spr.w * p.scaleX;
+                const h = spr.h * p.scaleY;
+                if (mx >= p.x && mx <= p.x + w && my >= p.y && my <= p.y + h) {
+                    selectedPlaced = i;
+                    draggingPlaced = true;
+                    dragOff.x = mx - p.x;
+                    dragOff.y = my - p.y;
+                    drawScreen();
+                    return;
+                }
+            }
+
+            // If sprite selected, place it
+            if (selectedSprite >= 0) {
+                const spr = sprites[selectedSprite];
+                placed.push({
+                    spriteIdx: selectedSprite,
+                    x: Math.round(mx - spr.w / 2),
+                    y: Math.round(my - spr.h / 2),
+                    scaleX: 1,
+                    scaleY: 1
+                });
+                selectedPlaced = placed.length - 1;
+                drawScreen();
+            } else {
+                selectedPlaced = -1;
+                drawScreen();
+            }
+        });
+
+        screenCanvas.addEventListener('mousemove', e => {
+            const r = screenCanvas.getBoundingClientRect();
+            const mx = (e.clientX - r.left) / screenZoom;
+            const my = (e.clientY - r.top) / screenZoom;
+
+            coordsDiv.textContent = `Screen: ${Math.round(mx)}, ${Math.round(my)}`;
+
+            if (draggingPlaced && selectedPlaced >= 0) {
+                placed[selectedPlaced].x = Math.round(mx - dragOff.x);
+                placed[selectedPlaced].y = Math.round(my - dragOff.y);
+                applySnapping(placed[selectedPlaced]);
+                drawScreen();
+            }
+        });
+
+        screenCanvas.addEventListener('mouseup', () => {
+            draggingPlaced = false;
+            snapH.style.display = 'none';
+            snapV.style.display = 'none';
+        });
+        screenCanvas.addEventListener('mouseleave', () => {
+            draggingPlaced = false;
+            snapH.style.display = 'none';
+            snapV.style.display = 'none';
+        });
+
+        function updatePlacedList() {
+            const list = document.getElementById('placed-list');
+            list.innerHTML = '';
+
+            placed.forEach((p, i) => {
+                const spr = sprites[p.spriteIdx];
+                const div = document.createElement('div');
+                div.className = 'placed-item' + (i === selectedPlaced ? ' selected' : '');
+
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = `${spr?.name || '?'} @ (${p.x}, ${p.y})`;
+                nameSpan.style.flex = '1';
+                nameSpan.onclick = () => {
+                    selectedPlaced = i;
+                    drawScreen();
+                };
+
+                // Scale X input
+                const scaleXLabel = document.createElement('span');
+                scaleXLabel.textContent = 'W:';
+                scaleXLabel.style.fontSize = '11px';
+                const scaleXInput = document.createElement('input');
+                scaleXInput.type = 'number';
+                scaleXInput.step = '0.1';
+                scaleXInput.min = '0.1';
+                scaleXInput.max = '10';
+                scaleXInput.value = p.scaleX.toFixed(1);
+                scaleXInput.onchange = e => {
+                    p.scaleX = parseFloat(e.target.value) || 1;
+                    drawScreen();
+                };
+                scaleXInput.onclick = e => e.stopPropagation();
+
+                // Scale Y input
+                const scaleYLabel = document.createElement('span');
+                scaleYLabel.textContent = 'H:';
+                scaleYLabel.style.fontSize = '11px';
+                const scaleYInput = document.createElement('input');
+                scaleYInput.type = 'number';
+                scaleYInput.step = '0.1';
+                scaleYInput.min = '0.1';
+                scaleYInput.max = '10';
+                scaleYInput.value = p.scaleY.toFixed(1);
+                scaleYInput.onchange = e => {
+                    p.scaleY = parseFloat(e.target.value) || 1;
+                    drawScreen();
+                };
+                scaleYInput.onclick = e => e.stopPropagation();
+
+                div.appendChild(nameSpan);
+                div.appendChild(scaleXLabel);
+                div.appendChild(scaleXInput);
+                div.appendChild(scaleYLabel);
+                div.appendChild(scaleYInput);
+                list.appendChild(div);
+            });
+        }
+
+        function removePlaced() {
+            if (selectedPlaced >= 0) {
+                placed.splice(selectedPlaced, 1);
+                selectedPlaced = -1;
+                drawScreen();
+            }
+        }
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Delete' && selectedPlaced >= 0) {
+                removePlaced();
+            }
+            // Arrow keys to nudge
+            if (selectedPlaced >= 0 && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                e.preventDefault();
+                const nudge = e.shiftKey ? 10 : 1;
+                if (e.key === 'ArrowUp') placed[selectedPlaced].y -= nudge;
+                if (e.key === 'ArrowDown') placed[selectedPlaced].y += nudge;
+                if (e.key === 'ArrowLeft') placed[selectedPlaced].x -= nudge;
+                if (e.key === 'ArrowRight') placed[selectedPlaced].x += nudge;
+                drawScreen();
+            }
+        });
+
+        function exportJSON() {
+            const data = {
+                screenSize: { width: SCREEN_W, height: SCREEN_H },
+                sprites: sprites.map(s => ({
+                    name: s.name,
+                    sheet: s.sheet,
+                    sourceX: s.sx,
+                    sourceY: s.sy,
+                    width: s.w,
+                    height: s.h,
+                    isCircle: s.isCircle || false,
+                    isLine: s.isLine || false,
+                    lineColor: s.lineColor || null,
+                    lineRadius: s.lineRadius || null
+                })),
+                placements: placed.map(p => ({
+                    sprite: sprites[p.spriteIdx]?.name,
+                    x: p.x,
+                    y: p.y,
+                    scaleX: p.scaleX,
+                    scaleY: p.scaleY
+                }))
+            };
+
+            const json = JSON.stringify(data, null, 2);
+            console.log(json);
+
+            navigator.clipboard.writeText(json).then(() => {
+                alert('JSON copied to clipboard!\n\n' + json);
+            }).catch(() => {
+                alert('JSON (check console):\n\n' + json);
+            });
+        }
+
+        // Init
+        drawSource();
+        updateSpriteList();
+    </script>
+</body>
+</html>

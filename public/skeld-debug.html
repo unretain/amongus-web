@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Skeld Map - Spawn, Collision & Vent Debug</title>
+    <style>
+        body {
+            background: #1a1a2e;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 10px;
+        }
+        #controls {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 100;
+            background: rgba(0,0,0,0.9);
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 320px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        button {
+            padding: 8px 12px;
+            margin: 3px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        button.active {
+            outline: 3px solid #0ff;
+        }
+        .spawn-btn { background: #00ff00; color: #000; }
+        .spawn-btn.active { background: #00aa00; }
+        .collision-btn { background: #ff0000; color: #fff; }
+        .collision-btn.active { background: #aa0000; }
+        .vent-btn { background: #ff00ff; color: #fff; }
+        .vent-btn.active { background: #aa00aa; }
+        .eraser-btn { background: #888; color: #fff; }
+        .eraser-btn.active { background: #555; }
+        #canvas-container {
+            margin-left: 340px;
+            overflow: auto;
+            max-height: calc(100vh - 20px);
+        }
+        canvas {
+            display: block;
+            cursor: crosshair;
+        }
+        #output {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.9);
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 500px;
+            max-height: 300px;
+            overflow: auto;
+            font-family: monospace;
+            font-size: 11px;
+            white-space: pre;
+        }
+        #coords {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.8);
+            padding: 10px;
+            border-radius: 8px;
+            font-family: monospace;
+        }
+        .tool-section {
+            margin: 10px 0;
+            padding: 10px 0;
+            border-top: 1px solid #444;
+        }
+        .tool-section:first-child {
+            border-top: none;
+            padding-top: 0;
+        }
+        label {
+            display: block;
+            margin: 5px 0;
+        }
+        select, input[type="number"] {
+            padding: 5px;
+            margin: 3px;
+            width: 60px;
+        }
+        .danger-btn { background: #ff4444; color: #fff; }
+        .clear-btn { background: #ff8800; color: #fff; }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <h3 style="margin-top:0">Skeld Map Debug</h3>
+
+        <div class="tool-section">
+            <strong>Tools:</strong><br>
+            <button id="spawnBtn" class="spawn-btn" onclick="setTool('spawn')">Spawn Point</button>
+            <button id="collisionBtn" class="collision-btn active" onclick="setTool('collision')">Collision Box</button>
+            <button id="ventBtn" class="vent-btn" onclick="setTool('vent')">Vent Connection</button>
+            <button id="eraserBtn" class="eraser-btn" onclick="setTool('eraser')">Eraser</button>
+        </div>
+
+        <div class="tool-section">
+            <strong>Spawn Point #:</strong>
+            <select id="spawnNumber">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+                <option value="7">7</option>
+                <option value="8">8</option>
+                <option value="9">9</option>
+                <option value="10">10</option>
+            </select>
+            <br><br>
+            <strong>Vent Group #:</strong>
+            <select id="ventNumber">
+                <option value="1">1 (Admin-Cafeteria)</option>
+                <option value="2">2 (Electrical-Security)</option>
+                <option value="3">3 (MedBay-Electrical-Security)</option>
+                <option value="4">4 (Reactor-Upper Engine-Lower Engine)</option>
+                <option value="5">5 (Navigation-Weapons-Shields)</option>
+            </select>
+        </div>
+
+        <div class="tool-section">
+            <strong>Zoom:</strong>
+            <button onclick="setZoom(0.25)">0.25x</button>
+            <button onclick="setZoom(0.5)">0.5x</button>
+            <button onclick="setZoom(1)">1x</button>
+            <button onclick="setZoom(1.5)">1.5x</button>
+        </div>
+
+        <div class="tool-section">
+            <strong>Actions:</strong><br>
+            <button onclick="undoLast()">Undo</button>
+            <button onclick="exportData()">Export JSON</button>
+            <button onclick="copyToClipboard()">Copy</button>
+            <br><br>
+            <button class="clear-btn" onclick="clearExceptVents()">Clear (Keep Vents)</button>
+            <button class="danger-btn" onclick="clearAll()">Clear All</button>
+        </div>
+
+        <div class="tool-section">
+            <strong>Visibility:</strong><br>
+            <label><input type="checkbox" id="showSpawns" checked onchange="redraw()"> Spawn Points</label>
+            <label><input type="checkbox" id="showCollisions" checked onchange="redraw()"> Collisions</label>
+            <label><input type="checkbox" id="showVents" checked onchange="redraw()"> Vent Connections</label>
+        </div>
+
+        <div class="tool-section">
+            <strong>Stats:</strong><br>
+            <span id="stats">Loading...</span>
+        </div>
+    </div>
+
+    <div id="coords">X: 0, Y: 0</div>
+
+    <div id="canvas-container">
+        <canvas id="mapCanvas"></canvas>
+        <canvas id="drawCanvas" style="position:absolute;top:0;left:0;pointer-events:none;"></canvas>
+    </div>
+
+    <div id="output">
+        // Export will appear here
+    </div>
+
+    <script>
+        const mapCanvas = document.getElementById('mapCanvas');
+        const mapCtx = mapCanvas.getContext('2d');
+        const drawCanvas = document.getElementById('drawCanvas');
+        const drawCtx = drawCanvas.getContext('2d');
+
+        let img = new Image();
+        let zoom = 0.5;
+        let tool = 'collision';
+        let isDrawing = false;
+        let startX = 0, startY = 0;
+
+        // Data storage
+        let spawnPoints = [];
+        let collisionBoxes = [];
+        let ventConnections = [];
+
+        // Load Skeld map
+        img.onload = function() {
+            resizeCanvases();
+            redraw();
+            updateStats();
+        };
+        img.src = '/assets/skeld-full.webp';
+
+        function resizeCanvases() {
+            const w = img.width * zoom;
+            const h = img.height * zoom;
+            mapCanvas.width = w;
+            mapCanvas.height = h;
+            drawCanvas.width = w;
+            drawCanvas.height = h;
+
+            const container = document.getElementById('canvas-container');
+            drawCanvas.style.left = container.offsetLeft + 'px';
+            drawCanvas.style.top = container.offsetTop + 'px';
+        }
+
+        function setZoom(z) {
+            zoom = z;
+            resizeCanvases();
+            redraw();
+        }
+
+        function setTool(t) {
+            tool = t;
+            document.querySelectorAll('#controls button[id$="Btn"]').forEach(b => b.classList.remove('active'));
+            const btn = document.getElementById(t + 'Btn');
+            if (btn) btn.classList.add('active');
+            mapCanvas.style.cursor = t === 'eraser' ? 'pointer' : 'crosshair';
+        }
+
+        function updateStats() {
+            document.getElementById('stats').innerHTML =
+                `Spawns: ${spawnPoints.length}<br>` +
+                `Collisions: ${collisionBoxes.length}<br>` +
+                `Vents: ${ventConnections.length}`;
+        }
+
+        function redraw() {
+            // Draw map
+            mapCtx.imageSmoothingEnabled = false;
+            mapCtx.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
+            mapCtx.drawImage(img, 0, 0, mapCanvas.width, mapCanvas.height);
+
+            // Draw collision boxes (red)
+            if (document.getElementById('showCollisions').checked) {
+                collisionBoxes.forEach(box => {
+                    mapCtx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+                    mapCtx.fillRect(
+                        box.x * zoom, box.y * zoom,
+                        box.w * zoom, box.h * zoom
+                    );
+                    mapCtx.strokeStyle = '#ff0000';
+                    mapCtx.lineWidth = 2;
+                    mapCtx.strokeRect(
+                        box.x * zoom, box.y * zoom,
+                        box.w * zoom, box.h * zoom
+                    );
+                });
+            }
+
+            // Draw vent connections (magenta circles with numbers)
+            if (document.getElementById('showVents').checked) {
+                ventConnections.forEach(vent => {
+                    mapCtx.beginPath();
+                    mapCtx.arc(vent.x * zoom, vent.y * zoom, 25 * zoom, 0, Math.PI * 2);
+                    mapCtx.fillStyle = 'rgba(255, 0, 255, 0.4)';
+                    mapCtx.fill();
+                    mapCtx.strokeStyle = '#ff00ff';
+                    mapCtx.lineWidth = 3;
+                    mapCtx.stroke();
+
+                    // Draw group number
+                    mapCtx.fillStyle = '#fff';
+                    mapCtx.font = `bold ${20 * zoom}px Arial`;
+                    mapCtx.textAlign = 'center';
+                    mapCtx.textBaseline = 'middle';
+                    mapCtx.fillText(vent.group, vent.x * zoom, vent.y * zoom);
+                });
+            }
+
+            // Draw spawn points (green circles with numbers)
+            if (document.getElementById('showSpawns').checked) {
+                spawnPoints.forEach(point => {
+                    mapCtx.beginPath();
+                    mapCtx.arc(point.x * zoom, point.y * zoom, 20 * zoom, 0, Math.PI * 2);
+                    mapCtx.fillStyle = 'rgba(0, 255, 0, 0.5)';
+                    mapCtx.fill();
+                    mapCtx.strokeStyle = '#00ff00';
+                    mapCtx.lineWidth = 3;
+                    mapCtx.stroke();
+
+                    // Draw number
+                    mapCtx.fillStyle = '#000';
+                    mapCtx.font = `bold ${16 * zoom}px Arial`;
+                    mapCtx.textAlign = 'center';
+                    mapCtx.textBaseline = 'middle';
+                    mapCtx.fillText(point.id, point.x * zoom, point.y * zoom);
+                });
+            }
+
+            // Clear draw canvas
+            drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+            updateStats();
+        }
+
+        // Mouse events
+        mapCanvas.addEventListener('mousedown', (e) => {
+            const rect = mapCanvas.getBoundingClientRect();
+            startX = Math.round((e.clientX - rect.left) / zoom);
+            startY = Math.round((e.clientY - rect.top) / zoom);
+            isDrawing = true;
+
+            if (tool === 'spawn') {
+                const spawnNum = parseInt(document.getElementById('spawnNumber').value);
+                spawnPoints = spawnPoints.filter(p => p.id !== spawnNum);
+                spawnPoints.push({ id: spawnNum, x: startX, y: startY });
+                redraw();
+                isDrawing = false;
+            } else if (tool === 'vent') {
+                const ventGroup = parseInt(document.getElementById('ventNumber').value);
+                ventConnections.push({ group: ventGroup, x: startX, y: startY });
+                redraw();
+                isDrawing = false;
+            } else if (tool === 'eraser') {
+                eraseAtPoint(startX, startY);
+                isDrawing = false;
+            }
+        });
+
+        mapCanvas.addEventListener('mousemove', (e) => {
+            const rect = mapCanvas.getBoundingClientRect();
+            const x = Math.round((e.clientX - rect.left) / zoom);
+            const y = Math.round((e.clientY - rect.top) / zoom);
+
+            document.getElementById('coords').textContent = `X: ${x}, Y: ${y}`;
+
+            if (isDrawing && tool === 'collision') {
+                drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+
+                drawCtx.fillStyle = 'rgba(255,0,0,0.4)';
+                drawCtx.fillRect(
+                    startX * zoom, startY * zoom,
+                    (x - startX) * zoom, (y - startY) * zoom
+                );
+                drawCtx.strokeStyle = '#ff0000';
+                drawCtx.lineWidth = 2;
+                drawCtx.strokeRect(
+                    startX * zoom, startY * zoom,
+                    (x - startX) * zoom, (y - startY) * zoom
+                );
+            }
+        });
+
+        mapCanvas.addEventListener('mouseup', (e) => {
+            if (!isDrawing) return;
+
+            const rect = mapCanvas.getBoundingClientRect();
+            const endX = Math.round((e.clientX - rect.left) / zoom);
+            const endY = Math.round((e.clientY - rect.top) / zoom);
+
+            if (tool === 'collision') {
+                const box = {
+                    x: Math.min(startX, endX),
+                    y: Math.min(startY, endY),
+                    w: Math.abs(endX - startX),
+                    h: Math.abs(endY - startY)
+                };
+                if (box.w > 5 && box.h > 5) {
+                    collisionBoxes.push(box);
+                }
+            }
+
+            isDrawing = false;
+            redraw();
+        });
+
+        function eraseAtPoint(x, y) {
+            const tolerance = 30;
+
+            // Check spawn points
+            for (let i = spawnPoints.length - 1; i >= 0; i--) {
+                const p = spawnPoints[i];
+                const dist = Math.sqrt(Math.pow(x - p.x, 2) + Math.pow(y - p.y, 2));
+                if (dist < tolerance) {
+                    spawnPoints.splice(i, 1);
+                    redraw();
+                    return;
+                }
+            }
+
+            // Check vent connections
+            for (let i = ventConnections.length - 1; i >= 0; i--) {
+                const v = ventConnections[i];
+                const dist = Math.sqrt(Math.pow(x - v.x, 2) + Math.pow(y - v.y, 2));
+                if (dist < tolerance) {
+                    ventConnections.splice(i, 1);
+                    redraw();
+                    return;
+                }
+            }
+
+            // Check collision boxes
+            for (let i = collisionBoxes.length - 1; i >= 0; i--) {
+                const box = collisionBoxes[i];
+                if (x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h) {
+                    collisionBoxes.splice(i, 1);
+                    redraw();
+                    return;
+                }
+            }
+        }
+
+        function clearAll() {
+            if (confirm('Clear ALL spawn points, collisions, and vent connections?')) {
+                spawnPoints = [];
+                collisionBoxes = [];
+                ventConnections = [];
+                redraw();
+            }
+        }
+
+        function clearExceptVents() {
+            if (confirm('Clear spawn points and collisions (keeping vent connections)?')) {
+                spawnPoints = [];
+                collisionBoxes = [];
+                redraw();
+            }
+        }
+
+        function undoLast() {
+            // Remove most recent item (collision boxes are most commonly added)
+            if (collisionBoxes.length > 0) {
+                collisionBoxes.pop();
+            } else if (ventConnections.length > 0) {
+                ventConnections.pop();
+            } else if (spawnPoints.length > 0) {
+                spawnPoints.pop();
+            }
+            redraw();
+        }
+
+        function exportData() {
+            const data = {
+                mapWidth: img.width,
+                mapHeight: img.height,
+                spawnPoints: spawnPoints.sort((a, b) => a.id - b.id),
+                collisionBoxes: collisionBoxes,
+                ventConnections: ventConnections.sort((a, b) => a.group - b.group)
+            };
+
+            const json = JSON.stringify(data, null, 2);
+            document.getElementById('output').textContent = json;
+        }
+
+        function copyToClipboard() {
+            exportData();
+            const text = document.getElementById('output').textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Copied to clipboard!');
+            });
+        }
+
+        // Initialize
+        setTool('collision');
+    </script>
+</body>
+</html>

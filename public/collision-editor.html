@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Collision Mask Editor</title>
+    <style>
+        body {
+            background: #1a1a2e;
+            color: white;
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #container {
+            position: relative;
+            display: inline-block;
+            overflow: auto;
+            max-width: 95vw;
+            max-height: 70vh;
+            border: 2px solid #444;
+        }
+        #mapCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #collisionCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            cursor: crosshair;
+        }
+        #controls {
+            margin-bottom: 15px;
+            padding: 15px;
+            background: #2a2a4a;
+            border-radius: 8px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #4ecdc4;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover { background: #45b7aa; }
+        button.active { background: #ff6b6b; }
+        button.danger { background: #e74c3c; }
+        button.danger:hover { background: #c0392b; }
+        button.success { background: #2ecc71; }
+        button.success:hover { background: #27ae60; }
+        button.spawn { background: #9b59b6; }
+        button.spawn:hover { background: #8e44ad; }
+        button.spawn.active { background: #e74c3c; }
+        h1 { color: #ff6b6b; }
+        .spawn-point {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(155, 89, 182, 0.8);
+            border: 3px solid #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 18px;
+            cursor: move;
+            transform: translate(-50%, -50%);
+            user-select: none;
+            z-index: 100;
+        }
+        .spawn-point:hover {
+            background: rgba(231, 76, 60, 0.9);
+        }
+        .spawn-point.selected {
+            border-color: #f1c40f;
+            box-shadow: 0 0 10px #f1c40f;
+        }
+        #spawnList {
+            margin-top: 10px;
+            padding: 10px;
+            background: #1a1a2e;
+            border-radius: 5px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .spawn-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px;
+            margin: 2px 0;
+            background: #2a2a4a;
+            border-radius: 3px;
+        }
+        .spawn-item button {
+            padding: 3px 8px;
+            margin: 0 2px;
+            font-size: 12px;
+        }
+        h3 { color: #4ecdc4; margin-top: 0; }
+        .tool-group {
+            display: inline-block;
+            margin-right: 20px;
+            padding: 10px;
+            background: #1a1a2e;
+            border-radius: 5px;
+        }
+        .tool-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #888;
+        }
+        input[type="range"] {
+            width: 150px;
+        }
+        #brushSize {
+            color: #4ecdc4;
+            font-weight: bold;
+        }
+        #instructions {
+            margin-top: 15px;
+            padding: 15px;
+            background: #2a2a4a;
+            border-radius: 8px;
+        }
+        #instructions ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        #instructions li {
+            margin: 5px 0;
+        }
+        .key {
+            background: #444;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>Collision Mask Editor</h1>
+
+    <div id="controls">
+        <div class="tool-group">
+            <label>Mode:</label>
+            <button id="btn-wall" class="active" onclick="setMode('wall')">Paint Walls (White)</button>
+            <button id="btn-floor" onclick="setMode('floor')">Paint Floor (Black)</button>
+        </div>
+
+        <div class="tool-group">
+            <label>Brush Size: <span id="brushSize">20</span>px</label>
+            <input type="range" id="brushSlider" min="5" max="100" value="20" oninput="setBrushSize(this.value)">
+        </div>
+
+        <div class="tool-group">
+            <label>Zoom:</label>
+            <button onclick="setZoom(0.5)">0.5x</button>
+            <button onclick="setZoom(1)" class="active" id="zoom1">1x</button>
+            <button onclick="setZoom(2)">2x</button>
+        </div>
+
+        <div class="tool-group">
+            <label>Opacity:</label>
+            <input type="range" id="opacitySlider" min="0" max="100" value="50" oninput="setOpacity(this.value)">
+        </div>
+
+        <div class="tool-group">
+            <label>Actions:</label>
+            <button onclick="fillAll('white')">Fill All White</button>
+            <button onclick="fillAll('black')">Fill All Black</button>
+            <button class="danger" onclick="clearCanvas()">Clear</button>
+            <button class="success" onclick="exportMask()">Export PNG</button>
+            <button onclick="loadExisting()">Load Existing</button>
+        </div>
+
+        <div class="tool-group">
+            <label>Spawn Points:</label>
+            <button id="btn-spawn" class="spawn" onclick="setMode('spawn')">Place Spawn Points</button>
+            <button class="success" onclick="exportSpawnPoints()">Export Spawn JSON</button>
+            <button onclick="loadSpawnPoints()">Load Spawn JSON</button>
+            <button class="danger" onclick="clearSpawnPoints()">Clear Spawns</button>
+        </div>
+    </div>
+
+    <div id="spawnControls" style="display: none; margin-bottom: 15px; padding: 15px; background: #2a2a4a; border-radius: 8px;">
+        <h3 style="margin-top: 0; color: #9b59b6;">Spawn Points (Click on map to place, drag to move)</h3>
+        <div id="spawnList"></div>
+        <p style="margin: 10px 0 0 0; color: #888; font-size: 12px;">
+            Click on the map to place spawn points 1-10. Drag to reposition. Right-click to delete.
+        </p>
+    </div>
+
+    <div id="container">
+        <canvas id="mapCanvas"></canvas>
+        <canvas id="collisionCanvas"></canvas>
+    </div>
+
+    <div id="instructions">
+        <h3>Instructions</h3>
+        <ul>
+            <li><span class="key">Left Click + Drag</span> - Paint with current mode</li>
+            <li><span class="key">White</span> = Walls/Blocked areas (player cannot walk)</li>
+            <li><span class="key">Black</span> = Floor/Walkable areas (player can walk)</li>
+            <li><span class="key">Scroll</span> - Zoom in/out</li>
+            <li>Start by clicking <strong>"Fill All White"</strong>, then paint the walkable areas black</li>
+            <li>When done, click <strong>"Export PNG"</strong> and save as <code>skeld-collision.png</code> in the assets folder</li>
+            <li><span class="key">S</span> - Switch to spawn point mode</li>
+            <li><span class="key">Spawn Points</span> - Click "Place Spawn Points" then click on map to add numbered spawns (1-10)</li>
+            <li><span class="key">Right Click</span> on spawn point to delete it</li>
+        </ul>
+    </div>
+
+    <script>
+        const mapCanvas = document.getElementById('mapCanvas');
+        const mapCtx = mapCanvas.getContext('2d');
+        const collisionCanvas = document.getElementById('collisionCanvas');
+        const collisionCtx = collisionCanvas.getContext('2d');
+        const container = document.getElementById('container');
+
+        let mapImg = new Image();
+        let zoom = 1;
+        let brushSize = 20;
+        let mode = 'wall'; // 'wall' = white, 'floor' = black, 'spawn' = spawn points
+        let isDrawing = false;
+        let lastX = 0;
+        let lastY = 0;
+
+        // Spawn points system
+        let spawnPoints = []; // Array of {id: 1-10, x: mapX, y: mapY}
+        let draggingSpawn = null;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+
+        // Original map dimensions
+        const mapWidth = 2141;
+        const mapHeight = 1198;
+
+        // Load the map image
+        mapImg.onload = function() {
+            resizeCanvases();
+            drawMap();
+            // Auto-load existing collision mask
+            autoLoadCollisionMask();
+            // Auto-load existing spawn points from Map.js defaults
+            autoLoadSpawnPoints();
+        };
+        mapImg.src = '/assets/skeld-full.webp';
+
+        function autoLoadCollisionMask() {
+            const existingMask = new Image();
+            existingMask.onload = function() {
+                collisionCtx.drawImage(existingMask, 0, 0, collisionCanvas.width, collisionCanvas.height);
+                console.log('Loaded existing collision mask');
+            };
+            existingMask.onerror = function() {
+                console.log('No existing collision mask found, starting fresh');
+                collisionCtx.clearRect(0, 0, collisionCanvas.width, collisionCanvas.height);
+            };
+            existingMask.src = '/assets/skeld-collision.png';
+        }
+
+        function autoLoadSpawnPoints() {
+            // Load current spawn points from Map.js defaults (circle around cafeteria table)
+            // These are the generated points at scale 0.25
+            const s = 0.25;
+            const tableX = 4900 * s; // 1225
+            const tableY = 1100 * s; // 275
+            const spawnRadius = 120;
+
+            spawnPoints = [];
+            for (let i = 0; i < 10; i++) {
+                const angle = (i / 10) * Math.PI * 2;
+                spawnPoints.push({
+                    id: i + 1,
+                    x: Math.round(tableX + Math.cos(angle) * spawnRadius),
+                    y: Math.round(tableY + Math.sin(angle) * spawnRadius)
+                });
+            }
+
+            renderSpawnPoints();
+            updateSpawnList();
+            console.log('Loaded default spawn points:', spawnPoints);
+        }
+
+        function resizeCanvases() {
+            const w = mapWidth * zoom;
+            const h = mapHeight * zoom;
+
+            mapCanvas.width = w;
+            mapCanvas.height = h;
+            collisionCanvas.width = w;
+            collisionCanvas.height = h;
+
+            container.style.width = w + 'px';
+            container.style.height = h + 'px';
+        }
+
+        function drawMap() {
+            mapCtx.imageSmoothingEnabled = false;
+            mapCtx.drawImage(mapImg, 0, 0, mapCanvas.width, mapCanvas.height);
+        }
+
+        function setMode(m) {
+            mode = m;
+            document.getElementById('btn-wall').classList.remove('active');
+            document.getElementById('btn-floor').classList.remove('active');
+            document.getElementById('btn-spawn').classList.remove('active');
+            document.getElementById('btn-' + m).classList.add('active');
+
+            // Show/hide spawn controls
+            document.getElementById('spawnControls').style.display = m === 'spawn' ? 'block' : 'none';
+
+            // Change cursor
+            collisionCanvas.style.cursor = m === 'spawn' ? 'pointer' : 'crosshair';
+        }
+
+        function setBrushSize(size) {
+            brushSize = parseInt(size);
+            document.getElementById('brushSize').textContent = size;
+        }
+
+        function setZoom(z) {
+            // Save current collision data
+            const imageData = collisionCtx.getImageData(0, 0, collisionCanvas.width, collisionCanvas.height);
+
+            zoom = z;
+            resizeCanvases();
+            drawMap();
+
+            // Restore collision data scaled
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = imageData.width;
+            tempCanvas.height = imageData.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.putImageData(imageData, 0, 0);
+
+            collisionCtx.drawImage(tempCanvas, 0, 0, collisionCanvas.width, collisionCanvas.height);
+
+            // Re-render spawn points at new zoom level
+            renderSpawnPoints();
+        }
+
+        function setOpacity(value) {
+            collisionCanvas.style.opacity = value / 100;
+        }
+
+        function fillAll(color) {
+            collisionCtx.fillStyle = color;
+            collisionCtx.fillRect(0, 0, collisionCanvas.width, collisionCanvas.height);
+        }
+
+        function clearCanvas() {
+            if (confirm('Clear all collision data?')) {
+                collisionCtx.clearRect(0, 0, collisionCanvas.width, collisionCanvas.height);
+            }
+        }
+
+        function exportMask() {
+            // Create export canvas at original map size
+            const exportCanvas = document.createElement('canvas');
+            exportCanvas.width = mapWidth;
+            exportCanvas.height = mapHeight;
+            const exportCtx = exportCanvas.getContext('2d');
+
+            // Fill with black (walkable by default if not painted)
+            exportCtx.fillStyle = 'black';
+            exportCtx.fillRect(0, 0, mapWidth, mapHeight);
+
+            // Draw collision data scaled to original size
+            exportCtx.drawImage(collisionCanvas, 0, 0, mapWidth, mapHeight);
+
+            // Export as PNG
+            const link = document.createElement('a');
+            link.download = 'skeld-collision.png';
+            link.href = exportCanvas.toDataURL('image/png');
+            link.click();
+        }
+
+        function loadExisting() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/png';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            collisionCtx.drawImage(img, 0, 0, collisionCanvas.width, collisionCanvas.height);
+                        };
+                        img.src = event.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+            input.click();
+        }
+
+        // ============================================
+        // SPAWN POINTS FUNCTIONS
+        // ============================================
+
+        function getNextSpawnId() {
+            // Find the lowest available ID from 1-10
+            for (let i = 1; i <= 10; i++) {
+                if (!spawnPoints.find(sp => sp.id === i)) {
+                    return i;
+                }
+            }
+            return null; // All 10 spawns placed
+        }
+
+        function addSpawnPoint(x, y) {
+            const id = getNextSpawnId();
+            if (id === null) {
+                alert('All 10 spawn points have been placed!');
+                return;
+            }
+
+            // Convert screen coords to map coords
+            const mapX = Math.round(x / zoom);
+            const mapY = Math.round(y / zoom);
+
+            spawnPoints.push({ id, x: mapX, y: mapY });
+            renderSpawnPoints();
+            updateSpawnList();
+        }
+
+        function renderSpawnPoints() {
+            // Remove existing spawn point elements
+            document.querySelectorAll('.spawn-point').forEach(el => el.remove());
+
+            // Create new ones
+            spawnPoints.forEach(sp => {
+                const el = document.createElement('div');
+                el.className = 'spawn-point';
+                el.dataset.id = sp.id;
+                el.textContent = sp.id;
+                el.style.left = (sp.x * zoom) + 'px';
+                el.style.top = (sp.y * zoom) + 'px';
+
+                // Drag events
+                el.addEventListener('mousedown', (e) => {
+                    if (e.button === 2) return; // Right click handled separately
+                    e.stopPropagation();
+                    draggingSpawn = sp;
+                    const rect = container.getBoundingClientRect();
+                    dragOffsetX = e.clientX - rect.left - (sp.x * zoom);
+                    dragOffsetY = e.clientY - rect.top - (sp.y * zoom);
+                    el.classList.add('selected');
+                });
+
+                // Right click to delete
+                el.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    deleteSpawnPoint(sp.id);
+                });
+
+                container.appendChild(el);
+            });
+        }
+
+        function deleteSpawnPoint(id) {
+            spawnPoints = spawnPoints.filter(sp => sp.id !== id);
+            renderSpawnPoints();
+            updateSpawnList();
+        }
+
+        function updateSpawnList() {
+            const list = document.getElementById('spawnList');
+            if (spawnPoints.length === 0) {
+                list.innerHTML = '<p style="color: #888; margin: 0;">No spawn points placed yet. Click on the map to add.</p>';
+                return;
+            }
+
+            // Sort by ID
+            const sorted = [...spawnPoints].sort((a, b) => a.id - b.id);
+
+            list.innerHTML = sorted.map(sp => `
+                <div class="spawn-item">
+                    <span>Spawn #${sp.id}: (${sp.x}, ${sp.y})</span>
+                    <div>
+                        <button onclick="focusSpawn(${sp.id})">Focus</button>
+                        <button class="danger" onclick="deleteSpawnPoint(${sp.id})">Delete</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function focusSpawn(id) {
+            const sp = spawnPoints.find(s => s.id === id);
+            if (sp) {
+                container.scrollLeft = (sp.x * zoom) - container.clientWidth / 2;
+                container.scrollTop = (sp.y * zoom) - container.clientHeight / 2;
+
+                // Flash the spawn point
+                const el = document.querySelector(`.spawn-point[data-id="${id}"]`);
+                if (el) {
+                    el.classList.add('selected');
+                    setTimeout(() => el.classList.remove('selected'), 1000);
+                }
+            }
+        }
+
+        function exportSpawnPoints() {
+            if (spawnPoints.length === 0) {
+                alert('No spawn points to export!');
+                return;
+            }
+
+            // Sort by ID for clean output
+            const sorted = [...spawnPoints].sort((a, b) => a.id - b.id);
+
+            const json = JSON.stringify(sorted, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const link = document.createElement('a');
+            link.download = 'spawn-points.json';
+            link.href = URL.createObjectURL(blob);
+            link.click();
+
+            console.log('Exported spawn points:', sorted);
+        }
+
+        function loadSpawnPoints() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        try {
+                            const data = JSON.parse(event.target.result);
+                            if (Array.isArray(data)) {
+                                spawnPoints = data.filter(sp =>
+                                    sp.id >= 1 && sp.id <= 10 &&
+                                    typeof sp.x === 'number' &&
+                                    typeof sp.y === 'number'
+                                );
+                                renderSpawnPoints();
+                                updateSpawnList();
+                                alert(`Loaded ${spawnPoints.length} spawn points!`);
+                            }
+                        } catch (err) {
+                            alert('Invalid JSON file!');
+                        }
+                    };
+                    reader.readAsText(file);
+                }
+            };
+            input.click();
+        }
+
+        function clearSpawnPoints() {
+            if (spawnPoints.length === 0) return;
+            if (confirm('Delete all spawn points?')) {
+                spawnPoints = [];
+                renderSpawnPoints();
+                updateSpawnList();
+            }
+        }
+
+        // ============================================
+        // DRAWING FUNCTIONS
+        // ============================================
+
+        // Drawing functions
+        function draw(x, y) {
+            const scaledBrush = brushSize * zoom;
+            collisionCtx.fillStyle = mode === 'wall' ? 'white' : 'black';
+            collisionCtx.beginPath();
+            collisionCtx.arc(x, y, scaledBrush / 2, 0, Math.PI * 2);
+            collisionCtx.fill();
+        }
+
+        function drawLine(x1, y1, x2, y2) {
+            const scaledBrush = brushSize * zoom;
+            collisionCtx.strokeStyle = mode === 'wall' ? 'white' : 'black';
+            collisionCtx.lineWidth = scaledBrush;
+            collisionCtx.lineCap = 'round';
+            collisionCtx.beginPath();
+            collisionCtx.moveTo(x1, y1);
+            collisionCtx.lineTo(x2, y2);
+            collisionCtx.stroke();
+        }
+
+        // Mouse events
+        collisionCanvas.addEventListener('mousedown', (e) => {
+            if (mode === 'spawn') {
+                // Add spawn point at click location
+                const rect = collisionCanvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                addSpawnPoint(x, y);
+                return;
+            }
+
+            isDrawing = true;
+            const rect = collisionCanvas.getBoundingClientRect();
+            lastX = e.clientX - rect.left;
+            lastY = e.clientY - rect.top;
+            draw(lastX, lastY);
+        });
+
+        collisionCanvas.addEventListener('mousemove', (e) => {
+            // Handle spawn point dragging
+            if (draggingSpawn) {
+                const rect = container.getBoundingClientRect();
+                const x = e.clientX - rect.left - dragOffsetX;
+                const y = e.clientY - rect.top - dragOffsetY;
+                draggingSpawn.x = Math.round(x / zoom);
+                draggingSpawn.y = Math.round(y / zoom);
+                renderSpawnPoints();
+                return;
+            }
+
+            if (!isDrawing) return;
+            const rect = collisionCanvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            drawLine(lastX, lastY, x, y);
+            lastX = x;
+            lastY = y;
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDrawing = false;
+            if (draggingSpawn) {
+                draggingSpawn = null;
+                document.querySelectorAll('.spawn-point').forEach(el => el.classList.remove('selected'));
+                updateSpawnList();
+            }
+        });
+
+        collisionCanvas.addEventListener('mouseleave', () => {
+            isDrawing = false;
+        });
+
+        // Scroll to zoom
+        container.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            if (e.deltaY < 0) {
+                if (zoom < 2) setZoom(zoom * 1.25);
+            } else {
+                if (zoom > 0.25) setZoom(zoom / 1.25);
+            }
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'w' || e.key === 'W') setMode('wall');
+            if (e.key === 'f' || e.key === 'F') setMode('floor');
+            if (e.key === 's' || e.key === 'S') setMode('spawn');
+            if (e.key === '[') setBrushSize(Math.max(5, brushSize - 5));
+            if (e.key === ']') setBrushSize(Math.min(100, brushSize + 5));
+        });
+
+        // Set initial opacity
+        setOpacity(50);
+    </script>
+</body>
+</html>

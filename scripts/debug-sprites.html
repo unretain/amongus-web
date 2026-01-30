@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sprite Debug</title>
+    <style>
+        body { background: #333; color: white; font-family: monospace; }
+        canvas { border: 1px solid white; margin: 10px; }
+        .frame { display: inline-block; margin: 5px; text-align: center; }
+    </style>
+</head>
+<body>
+    <h1>Sprite Debug</h1>
+    <div id="sprites"></div>
+
+    <script type="module">
+        const spriteData = await fetch('/assets/sprite-data.json').then(r => r.json());
+
+        // Load all three textures
+        const textures = {
+            'PlayerAnimations.png': await loadImage('/assets/PlayerAnimations.png'),
+            'PlayerAnimations_0.png': await loadImage('/assets/PlayerAnimations_0.png'),
+            'PlayerAnimations_1.png': await loadImage('/assets/PlayerAnimations_1.png'),
+        };
+
+        function loadImage(src) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = reject;
+                img.src = src;
+            });
+        }
+
+        const container = document.getElementById('sprites');
+
+        // Show idle from each texture
+        container.innerHTML += '<h2>Idle (x=605, y=525, 154x202)</h2>';
+        for (const [name, texture] of Object.entries(textures)) {
+            const frame = spriteData.idle[0];
+            const div = document.createElement('div');
+            div.className = 'frame';
+            div.innerHTML = `<p>${name}</p>`;
+
+            const canvas = document.createElement('canvas');
+            canvas.width = frame.width;
+            canvas.height = frame.height;
+            const ctx = canvas.getContext('2d');
+
+            // Convert Unity coords (bottom-left) to canvas (top-left)
+            const srcY = texture.height - frame.y - frame.height;
+            ctx.drawImage(texture, frame.x, srcY, frame.width, frame.height, 0, 0, frame.width, frame.height);
+
+            div.appendChild(canvas);
+            container.appendChild(div);
+        }
+
+        // Show walk frames from each texture
+        container.innerHTML += '<h2>Walk Frame 1 (x=189, y=175, 92x111)</h2>';
+        for (const [name, texture] of Object.entries(textures)) {
+            const frame = spriteData.walk[0];
+            const div = document.createElement('div');
+            div.className = 'frame';
+            div.innerHTML = `<p>${name}</p>`;
+
+            const canvas = document.createElement('canvas');
+            canvas.width = frame.width;
+            canvas.height = frame.height;
+            const ctx = canvas.getContext('2d');
+
+            const srcY = texture.height - frame.y - frame.height;
+            ctx.drawImage(texture, frame.x, srcY, frame.width, frame.height, 0, 0, frame.width, frame.height);
+
+            div.appendChild(canvas);
+            container.appendChild(div);
+        }
+
+        // Show all walk frames from _0
+        container.innerHTML += '<h2>All Walk Frames from PlayerAnimations_0.png</h2>';
+        const walkTexture = textures['PlayerAnimations_0.png'];
+        for (let i = 0; i < spriteData.walk.length; i++) {
+            const frame = spriteData.walk[i];
+            const div = document.createElement('div');
+            div.className = 'frame';
+            div.innerHTML = `<p>walk${i+1}: (${frame.x},${frame.y})</p>`;
+
+            const canvas = document.createElement('canvas');
+            canvas.width = frame.width;
+            canvas.height = frame.height;
+            const ctx = canvas.getContext('2d');
+
+            const srcY = walkTexture.height - frame.y - frame.height;
+            ctx.drawImage(walkTexture, frame.x, srcY, frame.width, frame.height, 0, 0, frame.width, frame.height);
+
+            div.appendChild(canvas);
+            container.appendChild(div);
+        }
+    </script>
+</body>
+</html>

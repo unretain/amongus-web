@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sabotage Map + Buttons Combiner</title>
+    <style>
+        body {
+            background: #1a1a2e;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 15px;
+        }
+        #main-container {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .panel {
+            background: rgba(0,0,0,0.5);
+            padding: 15px;
+            border-radius: 8px;
+        }
+        #source-panel {
+            flex: 0 0 500px;
+            max-height: 90vh;
+            overflow: auto;
+        }
+        #preview-panel {
+            flex: 1;
+            min-width: 500px;
+        }
+        h3 {
+            margin-top: 0;
+            color: #0ff;
+        }
+        .controls {
+            margin-bottom: 15px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+        button {
+            padding: 8px 14px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            background: #444;
+            color: #fff;
+        }
+        button:hover { background: #666; }
+        button.active { background: #0088ff; }
+        .success { background: #00aa00 !important; }
+        .danger { background: #aa0000 !important; }
+        #source-container {
+            position: relative;
+            display: inline-block;
+            border: 2px solid #444;
+            overflow: auto;
+            max-height: 50vh;
+        }
+        #source-img {
+            display: block;
+        }
+        #source-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            cursor: crosshair;
+        }
+        .sprite-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            margin: 5px 0;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .sprite-item:hover { background: rgba(255,255,255,0.2); }
+        .sprite-item.selected { background: rgba(0,136,255,0.4); border: 1px solid #0088ff; }
+        .sprite-item canvas {
+            border: 1px solid #555;
+        }
+        #preview-container {
+            position: relative;
+            display: inline-block;
+            border: 2px solid #444;
+            overflow: auto;
+            max-height: 70vh;
+        }
+        #preview-canvas {
+            display: block;
+            cursor: crosshair;
+        }
+        #output {
+            background: #000;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+        input[type="number"], input[type="text"] {
+            width: 80px;
+            padding: 5px;
+            background: #333;
+            border: 1px solid #555;
+            color: #fff;
+            border-radius: 4px;
+        }
+        input[type="text"] { width: 120px; }
+        .placed-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px;
+            margin: 4px 0;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+        }
+        #coords {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.8);
+            padding: 8px 15px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        .section-title {
+            color: #0ff;
+            font-weight: bold;
+            margin: 15px 0 10px 0;
+            border-bottom: 1px solid #0ff;
+            padding-bottom: 5px;
+        }
+        #cut-sprites-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h2 style="color: #0ff; margin-top: 0;">Sabotage Map + Buttons Combiner</h2>
+
+    <div id="main-container">
+        <div id="source-panel" class="panel">
+            <h3>Buttons Sprite Sheet</h3>
+
+            <div class="controls">
+                <label>Zoom:
+                    <button onclick="setSourceZoom(1)">1x</button>
+                    <button onclick="setSourceZoom(2)" class="active">2x</button>
+                    <button onclick="setSourceZoom(3)">3x</button>
+                    <button onclick="setSourceZoom(4)">4x</button>
+                </label>
+                <span id="loadStatus" style="margin-left: 10px; color: #0f0;"></span>
+            </div>
+
+            <div id="source-container">
+                <img id="source-img" src="/assets/ButtonsGui.png">
+                <canvas id="source-overlay"></canvas>
+            </div>
+
+            <div class="section-title">Cut Selection</div>
+            <div class="controls">
+                <label>Name: <input type="text" id="spriteName" value="button" placeholder="Sprite name"></label>
+                <button class="success" onclick="cutSelection()">Cut Selection</button>
+                <button onclick="clearSelection()">Clear</button>
+            </div>
+
+            <div class="section-title">Cut Sprites (<span id="cut-count">0</span>)</div>
+            <div id="cut-sprites-list"><em>Draw rectangle on sprite sheet to cut</em></div>
+
+            <div class="section-title">Placed on Map</div>
+            <div id="placed-list">Select a cut sprite, then click on map</div>
+
+            <div class="controls" style="margin-top: 15px;">
+                <button class="danger" onclick="clearAllPlaced()">Clear Placed</button>
+                <button class="danger" onclick="clearAllCut()">Clear Cut</button>
+                <button class="success" onclick="exportConfig()">Export JSON</button>
+            </div>
+        </div>
+
+        <div id="preview-panel" class="panel">
+            <h3>Sabotage Map Preview</h3>
+
+            <div class="controls">
+                <label>Map Scale:
+                    <button onclick="setPreviewScale(0.5)">0.5x</button>
+                    <button onclick="setPreviewScale(0.75)">0.75x</button>
+                    <button onclick="setPreviewScale(1)" class="active">1x</button>
+                    <button onclick="setPreviewScale(1.5)">1.5x</button>
+                </label>
+                <label style="margin-left: 15px;">Button Scale: <input type="number" id="buttonScale" value="0.5" step="0.1" min="0.1" max="3"></label>
+            </div>
+
+            <div id="preview-container">
+                <canvas id="preview-canvas"></canvas>
+            </div>
+
+            <div id="output">// Sabotage button positions will appear here</div>
+        </div>
+    </div>
+
+    <div id="coords">X: <span id="posX">0</span>, Y: <span id="posY">0</span></div>
+
+    <script>
+        // Images
+        const mapImg = new Image();
+        const sourceImg = document.getElementById('source-img');
+        const sourceOverlay = document.getElementById('source-overlay');
+        const sourceCtx = sourceOverlay.getContext('2d');
+
+        // Preview canvas
+        const previewCanvas = document.getElementById('preview-canvas');
+        const previewCtx = previewCanvas.getContext('2d');
+
+        // State
+        let sourceZoom = 2;
+        let previewScale = 1;
+        let selectedCutIndex = -1;
+        let placedButtons = [];
+
+        // Selection state for cutting
+        let isSelecting = false;
+        let selStart = null;
+        let selEnd = null;
+
+        // Cut sprites array
+        let cutSprites = [];
+
+        // Dragging placed buttons
+        let isDragging = false;
+        let dragIndex = -1;
+        let dragOffset = { x: 0, y: 0 };
+
+        // Load map
+        mapImg.onload = () => {
+            console.log('Map loaded:', mapImg.width, mapImg.height);
+            drawPreview();
+        };
+        mapImg.onerror = () => console.error('Failed to load map');
+        mapImg.src = '/assets/sabotage-map.png';
+
+        // Setup source image
+        function setupSource() {
+            sourceImg.style.width = (sourceImg.naturalWidth * sourceZoom) + 'px';
+            sourceImg.style.height = (sourceImg.naturalHeight * sourceZoom) + 'px';
+            sourceOverlay.width = sourceImg.naturalWidth * sourceZoom;
+            sourceOverlay.height = sourceImg.naturalHeight * sourceZoom;
+            document.getElementById('loadStatus').textContent = `${sourceImg.naturalWidth}x${sourceImg.naturalHeight}`;
+            drawSourceOverlay();
+        }
+
+        sourceImg.onload = setupSource;
+        if (sourceImg.complete && sourceImg.naturalWidth) setupSource();
+
+        function setSourceZoom(z) {
+            sourceZoom = z;
+            document.querySelectorAll('#source-panel .controls button').forEach(b => {
+                if (b.textContent.match(/^\d+x$/)) b.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            setupSource();
+        }
+
+        function drawSourceOverlay() {
+            sourceCtx.clearRect(0, 0, sourceOverlay.width, sourceOverlay.height);
+
+            // Draw current selection
+            if (selStart && selEnd) {
+                const x = Math.min(selStart.x, selEnd.x) * sourceZoom;
+                const y = Math.min(selStart.y, selEnd.y) * sourceZoom;
+                const w = Math.abs(selEnd.x - selStart.x) * sourceZoom;
+                const h = Math.abs(selEnd.y - selStart.y) * sourceZoom;
+
+                sourceCtx.strokeStyle = '#00ff00';
+                sourceCtx.lineWidth = 2;
+                sourceCtx.strokeRect(x, y, w, h);
+                sourceCtx.fillStyle = 'rgba(0, 255, 0, 0.2)';
+                sourceCtx.fillRect(x, y, w, h);
+            }
+        }
+
+        // Source overlay mouse events
+        sourceOverlay.addEventListener('mousedown', (e) => {
+            const rect = sourceOverlay.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / sourceZoom);
+            const y = Math.floor((e.clientY - rect.top) / sourceZoom);
+            isSelecting = true;
+            selStart = { x, y };
+            selEnd = { x, y };
+            drawSourceOverlay();
+        });
+
+        sourceOverlay.addEventListener('mousemove', (e) => {
+            const rect = sourceOverlay.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / sourceZoom);
+            const y = Math.floor((e.clientY - rect.top) / sourceZoom);
+
+            document.getElementById('posX').textContent = x;
+            document.getElementById('posY').textContent = y;
+
+            if (isSelecting) {
+                selEnd = { x, y };
+                drawSourceOverlay();
+            }
+        });
+
+        sourceOverlay.addEventListener('mouseup', () => {
+            isSelecting = false;
+        });
+
+        sourceOverlay.addEventListener('mouseleave', () => {
+            isSelecting = false;
+        });
+
+        function clearSelection() {
+            selStart = null;
+            selEnd = null;
+            drawSourceOverlay();
+        }
+
+        function cutSelection() {
+            if (!selStart || !selEnd) return;
+
+            const x = Math.min(selStart.x, selEnd.x);
+            const y = Math.min(selStart.y, selEnd.y);
+            const w = Math.abs(selEnd.x - selStart.x);
+            const h = Math.abs(selEnd.y - selStart.y);
+
+            if (w < 5 || h < 5) {
+                alert('Selection too small');
+                return;
+            }
+
+            const name = document.getElementById('spriteName').value || `sprite${cutSprites.length}`;
+
+            cutSprites.push({ name, x, y, w, h });
+            renderCutList();
+            clearSelection();
+
+            // Auto-increment name
+            const match = name.match(/^(.+?)(\d+)$/);
+            if (match) {
+                document.getElementById('spriteName').value = match[1] + (parseInt(match[2]) + 1);
+            }
+        }
+
+        function renderCutList() {
+            const list = document.getElementById('cut-sprites-list');
+            document.getElementById('cut-count').textContent = cutSprites.length;
+
+            if (cutSprites.length === 0) {
+                list.innerHTML = '<em>Draw rectangle on sprite sheet to cut</em>';
+                return;
+            }
+
+            list.innerHTML = '';
+            for (let i = 0; i < cutSprites.length; i++) {
+                const sprite = cutSprites[i];
+                const item = document.createElement('div');
+                item.className = 'sprite-item' + (selectedCutIndex === i ? ' selected' : '');
+                item.onclick = () => selectCutSprite(i);
+
+                // Mini preview canvas
+                const miniCanvas = document.createElement('canvas');
+                miniCanvas.width = 50;
+                miniCanvas.height = 50;
+                const miniCtx = miniCanvas.getContext('2d');
+
+                if (sourceImg.complete && sourceImg.naturalWidth) {
+                    const scale = Math.min(50 / sprite.w, 50 / sprite.h);
+                    const drawW = sprite.w * scale;
+                    const drawH = sprite.h * scale;
+                    miniCtx.drawImage(sourceImg, sprite.x, sprite.y, sprite.w, sprite.h,
+                        (50 - drawW) / 2, (50 - drawH) / 2, drawW, drawH);
+                }
+
+                const info = document.createElement('span');
+                info.innerHTML = `${sprite.name}<br><small>${sprite.x},${sprite.y} ${sprite.w}x${sprite.h}</small>`;
+
+                const delBtn = document.createElement('button');
+                delBtn.textContent = 'X';
+                delBtn.style.padding = '2px 8px';
+                delBtn.style.marginLeft = 'auto';
+                delBtn.onclick = (e) => { e.stopPropagation(); deleteCutSprite(i); };
+
+                item.appendChild(miniCanvas);
+                item.appendChild(info);
+                item.appendChild(delBtn);
+                list.appendChild(item);
+            }
+        }
+
+        function selectCutSprite(index) {
+            selectedCutIndex = index;
+            renderCutList();
+        }
+
+        function deleteCutSprite(index) {
+            cutSprites.splice(index, 1);
+            if (selectedCutIndex === index) selectedCutIndex = -1;
+            else if (selectedCutIndex > index) selectedCutIndex--;
+            renderCutList();
+            drawPreview();
+        }
+
+        function clearAllCut() {
+            cutSprites = [];
+            selectedCutIndex = -1;
+            renderCutList();
+            drawPreview();
+        }
+
+        function setPreviewScale(scale) {
+            previewScale = scale;
+            document.querySelectorAll('#preview-panel .controls button').forEach(b => {
+                if (b.textContent.match(/^[\d.]+x$/)) b.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            drawPreview();
+        }
+
+        function drawPreview() {
+            if (!mapImg.complete || !mapImg.naturalWidth) return;
+
+            const w = mapImg.width * previewScale;
+            const h = mapImg.height * previewScale;
+            previewCanvas.width = w;
+            previewCanvas.height = h;
+
+            // Draw map
+            previewCtx.drawImage(mapImg, 0, 0, w, h);
+
+            // Draw placed buttons
+            const btnScale = parseFloat(document.getElementById('buttonScale').value) || 0.5;
+
+            for (const placed of placedButtons) {
+                const sprite = cutSprites[placed.spriteIndex];
+                if (!sprite) continue;
+
+                const drawW = sprite.w * btnScale * previewScale;
+                const drawH = sprite.h * btnScale * previewScale;
+                const drawX = placed.x * previewScale - drawW / 2;
+                const drawY = placed.y * previewScale - drawH / 2;
+
+                previewCtx.drawImage(sourceImg, sprite.x, sprite.y, sprite.w, sprite.h,
+                    drawX, drawY, drawW, drawH);
+
+                // Draw label
+                previewCtx.fillStyle = '#fff';
+                previewCtx.strokeStyle = '#000';
+                previewCtx.lineWidth = 2;
+                previewCtx.font = `bold ${12 * previewScale}px Arial`;
+                previewCtx.textAlign = 'center';
+                previewCtx.strokeText(sprite.name, placed.x * previewScale, drawY - 5);
+                previewCtx.fillText(sprite.name, placed.x * previewScale, drawY - 5);
+            }
+
+            updatePlacedList();
+            updateOutput();
+        }
+
+        function updatePlacedList() {
+            const list = document.getElementById('placed-list');
+            if (placedButtons.length === 0) {
+                list.innerHTML = 'Select a cut sprite, then click on map';
+                return;
+            }
+
+            list.innerHTML = placedButtons.map((p, i) => {
+                const sprite = cutSprites[p.spriteIndex];
+                const name = sprite ? sprite.name : '?';
+                return `<div class="placed-item">
+                    <span>${name} (${Math.round(p.x)}, ${Math.round(p.y)})</span>
+                    <button onclick="removePlaced(${i})" style="padding: 2px 8px;">X</button>
+                </div>`;
+            }).join('');
+        }
+
+        function removePlaced(index) {
+            placedButtons.splice(index, 1);
+            drawPreview();
+        }
+
+        function clearAllPlaced() {
+            placedButtons = [];
+            drawPreview();
+        }
+
+        function updateOutput() {
+            const btnScale = parseFloat(document.getElementById('buttonScale').value) || 0.5;
+
+            let output = '// Sabotage Map Button Config\n';
+            output += `// Button scale: ${btnScale}\n\n`;
+            output += 'sabotageButtons: [\n';
+
+            for (const p of placedButtons) {
+                const sprite = cutSprites[p.spriteIndex];
+                if (!sprite) continue;
+                output += `    { name: "${sprite.name}", x: ${Math.round(p.x)}, y: ${Math.round(p.y)}, sprite: { x: ${sprite.x}, y: ${sprite.y}, w: ${sprite.w}, h: ${sprite.h} } },\n`;
+            }
+
+            output += ']\n';
+
+            document.getElementById('output').textContent = output;
+        }
+
+        function exportConfig() {
+            const btnScale = parseFloat(document.getElementById('buttonScale').value) || 0.5;
+
+            const config = {
+                buttonScale: btnScale,
+                mapSize: { w: mapImg.width, h: mapImg.height },
+                buttons: placedButtons.map(p => {
+                    const sprite = cutSprites[p.spriteIndex];
+                    return {
+                        name: sprite.name,
+                        x: Math.round(p.x),
+                        y: Math.round(p.y),
+                        sprite: { x: sprite.x, y: sprite.y, w: sprite.w, h: sprite.h }
+                    };
+                })
+            };
+
+            const json = JSON.stringify(config, null, 2);
+            navigator.clipboard.writeText(json).then(() => {
+                alert('Config copied to clipboard!');
+            });
+        }
+
+        // Preview canvas mouse events
+        previewCanvas.addEventListener('mousedown', (e) => {
+            const rect = previewCanvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / previewScale;
+            const y = (e.clientY - rect.top) / previewScale;
+
+            // Check if clicking on existing button to drag
+            const btnScale = parseFloat(document.getElementById('buttonScale').value) || 0.5;
+            for (let i = placedButtons.length - 1; i >= 0; i--) {
+                const p = placedButtons[i];
+                const sprite = cutSprites[p.spriteIndex];
+                if (!sprite) continue;
+
+                const hw = sprite.w * btnScale / 2;
+                const hh = sprite.h * btnScale / 2;
+
+                if (x >= p.x - hw && x <= p.x + hw && y >= p.y - hh && y <= p.y + hh) {
+                    isDragging = true;
+                    dragIndex = i;
+                    dragOffset = { x: x - p.x, y: y - p.y };
+                    return;
+                }
+            }
+
+            // Place new button if one is selected
+            if (selectedCutIndex >= 0 && selectedCutIndex < cutSprites.length) {
+                placedButtons.push({
+                    spriteIndex: selectedCutIndex,
+                    x: x,
+                    y: y
+                });
+                drawPreview();
+            }
+        });
+
+        previewCanvas.addEventListener('mousemove', (e) => {
+            const rect = previewCanvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / previewScale;
+            const y = (e.clientY - rect.top) / previewScale;
+
+            if (isDragging && dragIndex >= 0) {
+                placedButtons[dragIndex].x = x - dragOffset.x;
+                placedButtons[dragIndex].y = y - dragOffset.y;
+                drawPreview();
+            }
+        });
+
+        previewCanvas.addEventListener('mouseup', () => {
+            isDragging = false;
+            dragIndex = -1;
+        });
+
+        previewCanvas.addEventListener('mouseleave', () => {
+            isDragging = false;
+            dragIndex = -1;
+        });
+
+        // Update preview when button scale changes
+        document.getElementById('buttonScale').addEventListener('input', drawPreview);
+    </script>
+</body>
+</html>

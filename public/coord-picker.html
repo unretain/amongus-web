@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Coordinate Picker - Astronaut Sprites</title>
+    <style>
+        body { background: #222; color: white; font-family: monospace; margin: 0; }
+        #info { position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.9); padding: 15px; z-index: 100; max-width: 400px; }
+        #preview { position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.9); padding: 15px; z-index: 100; }
+        #preview canvas { border: 2px solid #0ff; background: #444; }
+        canvas#main { cursor: crosshair; }
+        .coords { color: #0ff; font-size: 14px; margin: 5px 0; }
+        button { margin: 5px; padding: 5px 10px; cursor: pointer; }
+        select { margin: 5px; padding: 5px; }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h3>Astronaut Sprite Picker</h3>
+        <div>Texture: <select id="texture">
+            <option value="/assets/Astronaut-Orange.png">Astronaut-Orange.png</option>
+            <option value="/assets/Astronaut-Blue.png">Astronaut-Blue.png</option>
+            <option value="/assets/Astronaut-Cyan.png">Astronaut-Cyan.png</option>
+            <option value="/assets/PlayerAnimations.png">PlayerAnimations.png</option>
+            <option value="/assets/PlayerAnimations_0.png">PlayerAnimations_0.png</option>
+            <option value="/assets/PlayerAnimations_1.png">PlayerAnimations_1.png</option>
+        </select></div>
+        <div class="coords" id="mouseCoords">Click to select start point</div>
+        <div class="coords" id="selection">Selection: none</div>
+        <div>
+            <button id="copyBtn">Copy Frame JSON</button>
+            <button id="clearBtn">Clear Selection</button>
+        </div>
+        <div id="frameJson" style="background:#333; padding:10px; margin-top:10px; font-size:11px; max-height:200px; overflow:auto;"></div>
+    </div>
+    <div id="preview">
+        <h4>Preview (click & drag to select)</h4>
+        <canvas id="previewCanvas" width="200" height="200"></canvas>
+    </div>
+    <canvas id="main"></canvas>
+
+    <script>
+        const canvas = document.getElementById('main');
+        const ctx = canvas.getContext('2d');
+        const previewCanvas = document.getElementById('previewCanvas');
+        const previewCtx = previewCanvas.getContext('2d');
+
+        let img = new Image();
+        let startX = null, startY = null;
+        let endX = null, endY = null;
+        let isDragging = false;
+
+        function loadTexture(src) {
+            img = new Image();
+            img.onload = () => {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                redraw();
+                document.getElementById('mouseCoords').textContent = `Loaded: ${img.width}x${img.height}`;
+            };
+            img.src = src;
+        }
+
+        document.getElementById('texture').addEventListener('change', (e) => {
+            loadTexture(e.target.value);
+            startX = startY = endX = endY = null;
+        });
+
+        loadTexture('/assets/Astronaut-Orange.png');
+
+        function redraw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+
+            if (startX !== null && endX !== null) {
+                const x = Math.min(startX, endX);
+                const y = Math.min(startY, endY);
+                const w = Math.abs(endX - startX);
+                const h = Math.abs(endY - startY);
+
+                ctx.strokeStyle = '#0ff';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x, y, w, h);
+
+                // Update preview
+                previewCanvas.width = Math.max(w, 1);
+                previewCanvas.height = Math.max(h, 1);
+                previewCtx.drawImage(img, x, y, w, h, 0, 0, w, h);
+            }
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            startX = Math.round(e.clientX - rect.left);
+            startY = Math.round(e.clientY - rect.top);
+            endX = startX;
+            endY = startY;
+            isDragging = true;
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = Math.round(e.clientX - rect.left);
+            const y = Math.round(e.clientY - rect.top);
+
+            document.getElementById('mouseCoords').textContent = `Mouse: (${x}, ${y}) | Canvas Y for Unity: ${img.height - y}`;
+
+            if (isDragging) {
+                endX = x;
+                endY = y;
+                redraw();
+                updateSelection();
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            isDragging = false;
+            updateSelection();
+        });
+
+        function updateSelection() {
+            if (startX === null || endX === null) return;
+
+            const x = Math.min(startX, endX);
+            const y = Math.min(startY, endY);
+            const w = Math.abs(endX - startX);
+            const h = Math.abs(endY - startY);
+
+            // For Unity, Y is from bottom, so convert
+            const unityY = img.height - y - h;
+
+            document.getElementById('selection').innerHTML =
+                `Canvas: x=${x}, y=${y}, ${w}x${h}<br>` +
+                `<b>Unity coords: x=${x}, y=${unityY}, ${w}x${h}</b>`;
+
+            const frameJson = {
+                name: "frame",
+                x: x,
+                y: unityY,
+                width: w,
+                height: h,
+                pivot: { x: 0.5, y: 0.5 }
+            };
+            document.getElementById('frameJson').textContent = JSON.stringify(frameJson, null, 2);
+        }
+
+        document.getElementById('copyBtn').addEventListener('click', () => {
+            const json = document.getElementById('frameJson').textContent;
+            navigator.clipboard.writeText(json);
+            alert('Copied!');
+        });
+
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            startX = startY = endX = endY = null;
+            redraw();
+            document.getElementById('selection').textContent = 'Selection: none';
+            document.getElementById('frameJson').textContent = '';
+            previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+        });
+    </script>
+</body>
+</html>

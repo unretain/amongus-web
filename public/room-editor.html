@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Room Marker Editor</title>
+    <style>
+        body {
+            background: #1a1a2e;
+            color: white;
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #container {
+            position: relative;
+            display: inline-block;
+            overflow: auto;
+            max-width: 95vw;
+            max-height: 70vh;
+            border: 2px solid #444;
+        }
+        #mapCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #roomCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            cursor: crosshair;
+        }
+        #controls {
+            margin-bottom: 15px;
+            padding: 15px;
+            background: #2a2a4a;
+            border-radius: 8px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #4ecdc4;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover { background: #45b7aa; }
+        button.active { background: #ff6b6b; }
+        button.danger { background: #e74c3c; }
+        button.danger:hover { background: #c0392b; }
+        button.success { background: #2ecc71; }
+        button.success:hover { background: #27ae60; }
+        h1 { color: #ff6b6b; }
+        h3 { color: #4ecdc4; margin-top: 0; }
+        .tool-group {
+            display: inline-block;
+            margin-right: 20px;
+            padding: 10px;
+            background: #1a1a2e;
+            border-radius: 5px;
+            vertical-align: top;
+        }
+        .tool-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #888;
+        }
+        #roomSelect {
+            padding: 10px;
+            font-size: 16px;
+            background: #2a2a4a;
+            color: white;
+            border: 2px solid #4ecdc4;
+            border-radius: 5px;
+            min-width: 200px;
+        }
+        #roomSelect option {
+            padding: 5px;
+        }
+        #roomList {
+            margin-top: 10px;
+            padding: 10px;
+            background: #1a1a2e;
+            border-radius: 5px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .room-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            margin: 4px 0;
+            background: #2a2a4a;
+            border-radius: 3px;
+            border-left: 4px solid;
+        }
+        .room-item button {
+            padding: 5px 10px;
+            margin: 0 2px;
+            font-size: 12px;
+        }
+        #instructions {
+            margin-top: 15px;
+            padding: 15px;
+            background: #2a2a4a;
+            border-radius: 8px;
+        }
+        #instructions ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        #instructions li {
+            margin: 5px 0;
+        }
+        .key {
+            background: #444;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        .room-color {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 3px;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body>
+    <h1>Room Marker Editor</h1>
+
+    <div id="controls">
+        <div class="tool-group">
+            <label>Select Room:</label>
+            <select id="roomSelect">
+                <option value="cafeteria" data-color="#f39c12">Cafeteria</option>
+                <option value="weapons" data-color="#e74c3c">Weapons</option>
+                <option value="navigation" data-color="#9b59b6">Navigation</option>
+                <option value="o2" data-color="#3498db">O2</option>
+                <option value="admin" data-color="#1abc9c">Admin</option>
+                <option value="storage" data-color="#95a5a6">Storage</option>
+                <option value="communications" data-color="#e67e22">Communications</option>
+                <option value="shields" data-color="#2ecc71">Shields</option>
+                <option value="electrical" data-color="#f1c40f">Electrical</option>
+                <option value="lower_engine" data-color="#c0392b">Lower Engine</option>
+                <option value="upper_engine" data-color="#d35400">Upper Engine</option>
+                <option value="reactor" data-color="#8e44ad">Reactor</option>
+                <option value="security" data-color="#16a085">Security</option>
+                <option value="medbay" data-color="#27ae60">MedBay</option>
+            </select>
+        </div>
+
+        <div class="tool-group">
+            <label>Zoom:</label>
+            <button onclick="setZoom(0.5)">0.5x</button>
+            <button onclick="setZoom(1)" class="active" id="zoom1">1x</button>
+            <button onclick="setZoom(2)">2x</button>
+        </div>
+
+        <div class="tool-group">
+            <label>Opacity:</label>
+            <input type="range" id="opacitySlider" min="20" max="80" value="50" oninput="setOpacity(this.value)">
+        </div>
+
+        <div class="tool-group">
+            <label>Actions:</label>
+            <button class="success" onclick="exportRooms()">Export JSON</button>
+            <button onclick="loadRooms()">Load JSON</button>
+            <button class="danger" onclick="clearAllRooms()">Clear All</button>
+        </div>
+    </div>
+
+    <div id="roomListPanel" style="margin-bottom: 15px; padding: 15px; background: #2a2a4a; border-radius: 8px;">
+        <h3>Defined Rooms</h3>
+        <div id="roomList">
+            <p style="color: #888; margin: 0;">No rooms defined yet. Select a room and draw on the map.</p>
+        </div>
+    </div>
+
+    <div id="container">
+        <canvas id="mapCanvas"></canvas>
+        <canvas id="roomCanvas"></canvas>
+    </div>
+
+    <div id="instructions">
+        <h3>Instructions</h3>
+        <ul>
+            <li><span class="key">Select Room</span> - Choose a room type from the dropdown</li>
+            <li><span class="key">Click + Drag</span> - Draw a rectangle for that room</li>
+            <li>Each room can only have ONE bounding box</li>
+            <li>Drawing a new box for the same room replaces the old one</li>
+            <li><span class="key">Right Click</span> on a room box to delete it</li>
+            <li><span class="key">Scroll</span> - Zoom in/out</li>
+            <li>When done, click <strong>"Export JSON"</strong> to save room data</li>
+        </ul>
+    </div>
+
+    <script>
+        const mapCanvas = document.getElementById('mapCanvas');
+        const mapCtx = mapCanvas.getContext('2d');
+        const roomCanvas = document.getElementById('roomCanvas');
+        const roomCtx = roomCanvas.getContext('2d');
+        const container = document.getElementById('container');
+        const roomSelect = document.getElementById('roomSelect');
+
+        let mapImg = new Image();
+        let zoom = 1;
+        let isDrawing = false;
+        let startX = 0;
+        let startY = 0;
+        let currentX = 0;
+        let currentY = 0;
+
+        // Room definitions: roomName -> {x, y, w, h, color}
+        let rooms = {};
+
+        // Room colors (from dropdown data attributes)
+        const roomColors = {
+            cafeteria: '#f39c12',
+            weapons: '#e74c3c',
+            navigation: '#9b59b6',
+            o2: '#3498db',
+            admin: '#1abc9c',
+            storage: '#95a5a6',
+            communications: '#e67e22',
+            shields: '#2ecc71',
+            electrical: '#f1c40f',
+            lower_engine: '#c0392b',
+            upper_engine: '#d35400',
+            reactor: '#8e44ad',
+            security: '#16a085',
+            medbay: '#27ae60'
+        };
+
+        // Original map dimensions
+        const mapWidth = 2141;
+        const mapHeight = 1198;
+
+        // Load the map image
+        mapImg.onload = function() {
+            resizeCanvases();
+            drawMap();
+            renderRooms();
+        };
+        mapImg.src = '/assets/skeld-full.webp';
+
+        function resizeCanvases() {
+            const w = mapWidth * zoom;
+            const h = mapHeight * zoom;
+
+            mapCanvas.width = w;
+            mapCanvas.height = h;
+            roomCanvas.width = w;
+            roomCanvas.height = h;
+
+            container.style.width = w + 'px';
+            container.style.height = h + 'px';
+        }
+
+        function drawMap() {
+            mapCtx.imageSmoothingEnabled = false;
+            mapCtx.drawImage(mapImg, 0, 0, mapCanvas.width, mapCanvas.height);
+        }
+
+        function setZoom(z) {
+            zoom = z;
+            resizeCanvases();
+            drawMap();
+            renderRooms();
+
+            // Update active button
+            document.querySelectorAll('.tool-group button').forEach(b => {
+                if (b.textContent.includes('x') && b.id !== 'zoom1') {
+                    b.classList.remove('active');
+                }
+            });
+        }
+
+        function setOpacity(value) {
+            roomCanvas.style.opacity = value / 100;
+        }
+
+        function getSelectedRoom() {
+            return roomSelect.value;
+        }
+
+        function getSelectedColor() {
+            return roomColors[roomSelect.value] || '#ffffff';
+        }
+
+        function renderRooms() {
+            roomCtx.clearRect(0, 0, roomCanvas.width, roomCanvas.height);
+
+            for (const [name, room] of Object.entries(rooms)) {
+                const x = room.x * zoom;
+                const y = room.y * zoom;
+                const w = room.w * zoom;
+                const h = room.h * zoom;
+
+                // Fill with semi-transparent color
+                roomCtx.fillStyle = room.color + '80'; // 50% opacity
+                roomCtx.fillRect(x, y, w, h);
+
+                // Border
+                roomCtx.strokeStyle = room.color;
+                roomCtx.lineWidth = 3;
+                roomCtx.strokeRect(x, y, w, h);
+
+                // Label
+                roomCtx.fillStyle = '#ffffff';
+                roomCtx.font = 'bold 16px Arial';
+                roomCtx.textAlign = 'center';
+                roomCtx.textBaseline = 'middle';
+
+                // Background for text
+                const label = name.replace('_', ' ').toUpperCase();
+                const textMetrics = roomCtx.measureText(label);
+                const textW = textMetrics.width + 10;
+                const textH = 24;
+                const textX = x + w / 2;
+                const textY = y + h / 2;
+
+                roomCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                roomCtx.fillRect(textX - textW / 2, textY - textH / 2, textW, textH);
+
+                roomCtx.fillStyle = room.color;
+                roomCtx.fillText(label, textX, textY);
+            }
+
+            // Draw current selection rectangle while drawing
+            if (isDrawing) {
+                const x = Math.min(startX, currentX);
+                const y = Math.min(startY, currentY);
+                const w = Math.abs(currentX - startX);
+                const h = Math.abs(currentY - startY);
+
+                roomCtx.fillStyle = getSelectedColor() + '40';
+                roomCtx.fillRect(x, y, w, h);
+                roomCtx.strokeStyle = getSelectedColor();
+                roomCtx.lineWidth = 2;
+                roomCtx.setLineDash([5, 5]);
+                roomCtx.strokeRect(x, y, w, h);
+                roomCtx.setLineDash([]);
+            }
+
+            updateRoomList();
+        }
+
+        function updateRoomList() {
+            const list = document.getElementById('roomList');
+            const roomNames = Object.keys(rooms);
+
+            if (roomNames.length === 0) {
+                list.innerHTML = '<p style="color: #888; margin: 0;">No rooms defined yet. Select a room and draw on the map.</p>';
+                return;
+            }
+
+            // Sort alphabetically
+            roomNames.sort();
+
+            list.innerHTML = roomNames.map(name => {
+                const room = rooms[name];
+                const displayName = name.replace('_', ' ').toUpperCase();
+                return `
+                    <div class="room-item" style="border-color: ${room.color};">
+                        <span>
+                            <span class="room-color" style="background: ${room.color};"></span>
+                            ${displayName}: (${room.x}, ${room.y}) ${room.w}x${room.h}
+                        </span>
+                        <button class="danger" onclick="deleteRoom('${name}')">Delete</button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function deleteRoom(name) {
+            delete rooms[name];
+            renderRooms();
+        }
+
+        function clearAllRooms() {
+            if (Object.keys(rooms).length === 0) return;
+            if (confirm('Delete all room definitions?')) {
+                rooms = {};
+                renderRooms();
+            }
+        }
+
+        function exportRooms() {
+            if (Object.keys(rooms).length === 0) {
+                alert('No rooms to export!');
+                return;
+            }
+
+            // Export without color (it's derived from room name)
+            const exportData = {};
+            for (const [name, room] of Object.entries(rooms)) {
+                exportData[name] = {
+                    x: room.x,
+                    y: room.y,
+                    w: room.w,
+                    h: room.h
+                };
+            }
+
+            const json = JSON.stringify(exportData, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const link = document.createElement('a');
+            link.download = 'room-bounds.json';
+            link.href = URL.createObjectURL(blob);
+            link.click();
+
+            console.log('Exported rooms:', exportData);
+        }
+
+        function loadRooms() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        try {
+                            const data = JSON.parse(event.target.result);
+                            rooms = {};
+                            for (const [name, bounds] of Object.entries(data)) {
+                                if (roomColors[name]) {
+                                    rooms[name] = {
+                                        x: bounds.x,
+                                        y: bounds.y,
+                                        w: bounds.w,
+                                        h: bounds.h,
+                                        color: roomColors[name]
+                                    };
+                                }
+                            }
+                            renderRooms();
+                            alert(`Loaded ${Object.keys(rooms).length} rooms!`);
+                        } catch (err) {
+                            alert('Invalid JSON file!');
+                        }
+                    };
+                    reader.readAsText(file);
+                }
+            };
+            input.click();
+        }
+
+        // Mouse events for drawing rectangles
+        roomCanvas.addEventListener('mousedown', (e) => {
+            if (e.button === 2) return; // Right click handled separately
+
+            isDrawing = true;
+            const rect = roomCanvas.getBoundingClientRect();
+            startX = e.clientX - rect.left;
+            startY = e.clientY - rect.top;
+            currentX = startX;
+            currentY = startY;
+        });
+
+        roomCanvas.addEventListener('mousemove', (e) => {
+            if (!isDrawing) return;
+            const rect = roomCanvas.getBoundingClientRect();
+            currentX = e.clientX - rect.left;
+            currentY = e.clientY - rect.top;
+            renderRooms();
+        });
+
+        roomCanvas.addEventListener('mouseup', (e) => {
+            if (!isDrawing) return;
+            isDrawing = false;
+
+            const rect = roomCanvas.getBoundingClientRect();
+            const endX = e.clientX - rect.left;
+            const endY = e.clientY - rect.top;
+
+            // Calculate bounds (in map coordinates, not zoomed)
+            const x = Math.round(Math.min(startX, endX) / zoom);
+            const y = Math.round(Math.min(startY, endY) / zoom);
+            const w = Math.round(Math.abs(endX - startX) / zoom);
+            const h = Math.round(Math.abs(endY - startY) / zoom);
+
+            // Minimum size check
+            if (w < 20 || h < 20) {
+                renderRooms();
+                return;
+            }
+
+            // Save room (replaces existing if same name)
+            const roomName = getSelectedRoom();
+            rooms[roomName] = {
+                x: x,
+                y: y,
+                w: w,
+                h: h,
+                color: getSelectedColor()
+            };
+
+            renderRooms();
+        });
+
+        // Right click to delete room at position
+        roomCanvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            const rect = roomCanvas.getBoundingClientRect();
+            const clickX = (e.clientX - rect.left) / zoom;
+            const clickY = (e.clientY - rect.top) / zoom;
+
+            // Find room at click position
+            for (const [name, room] of Object.entries(rooms)) {
+                if (clickX >= room.x && clickX <= room.x + room.w &&
+                    clickY >= room.y && clickY <= room.y + room.h) {
+                    delete rooms[name];
+                    renderRooms();
+                    return;
+                }
+            }
+        });
+
+        // Scroll to zoom
+        container.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            if (e.deltaY < 0) {
+                if (zoom < 2) setZoom(Math.min(2, zoom * 1.25));
+            } else {
+                if (zoom > 0.25) setZoom(Math.max(0.25, zoom / 1.25));
+            }
+        });
+
+        // Set initial opacity
+        setOpacity(50);
+    </script>
+</body>
+</html>
