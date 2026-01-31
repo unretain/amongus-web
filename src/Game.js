@@ -318,15 +318,6 @@ export class Game {
             // Start role reveal screen (Crewmate for now)
             this.startRoleReveal();
 
-            // Debug: log tasks at game start
-            console.log('=== GAME START - TASKS DEBUG ===');
-            console.log('Tasks count:', this.tasks?.length);
-            if (this.tasks) {
-                this.tasks.forEach((t, i) => {
-                    console.log(`Task ${i}: ${t.name} | ${t.room} (completed: ${t.completed})`);
-                });
-            }
-            console.log('================================');
         };
 
         // Countdown started - sync countdown to all players
@@ -664,6 +655,17 @@ export class Game {
     processMapShapes() {
         // Process shapes - use embedded taskName/taskRoom if present (from Task Outliner),
         // otherwise fall back to proximity matching
+
+        // First pass: convert "Clean O2 Filter" shapes to vent indicators
+        for (const shape of this.mapShapes) {
+            if (shape.taskName === 'Clean O2 Filter') {
+                // These are vent locations, not tasks - mark them as vents
+                shape.isVent = true;
+                shape.taskName = null; // Clear task name so it's not used for tasks
+                shape.taskRoom = null;
+            }
+        }
+
         const taskLocations = [
             { name: 'Align Engine Output', room: 'Upper Engine', x: 1847, y: 653 },
             { name: 'Align Engine Output', room: 'Lower Engine', x: 1709, y: 2885 },
@@ -707,7 +709,6 @@ export class Game {
 
             // If shape already has taskName and taskRoom from export, use those directly
             if (shape.taskName && shape.taskRoom && shape.taskName !== 'Unknown') {
-                console.log(`Shape has task: ${shape.taskName} (${shape.taskRoom})`);
                 continue;
             }
 
@@ -738,8 +739,6 @@ export class Game {
                 shape.taskRoom = nearestTask.room;
             }
         }
-
-        console.log('Map shapes processed with task associations');
     }
 
     async loadMinimapData() {
@@ -1944,10 +1943,8 @@ export class Game {
         if (!this.roleRevealActive) return;
 
         this.roleRevealTimer += dt;
-        console.log('Role reveal timer:', this.roleRevealTimer, '/', this.roleRevealDuration);
         if (this.roleRevealTimer >= this.roleRevealDuration) {
             this.roleRevealActive = false;
-            console.log('Role reveal ended');
         }
     }
 
@@ -2978,11 +2975,11 @@ export class Game {
     renderTaskBoxes(ctx, camera) {
         if (!this.mapShapes || !this.localPlayer) return;
 
-        // Build set of task keys player has (incomplete AND enabled tasks only)
+        // Build set of task keys player has (ALL incomplete tasks, regardless of enabled status)
         const playerTaskKeys = new Set();
         if (this.tasks) {
             for (const task of this.tasks) {
-                if (!task.completed && task.enabled !== false) {
+                if (!task.completed) {
                     // Strip step suffix like "(1/3)" for shape matching
                     const baseName = task.name.replace(/\s*\(\d+\/\d+\)$/, '');
                     playerTaskKeys.add(`${baseName}|${task.room}`);
@@ -2990,7 +2987,6 @@ export class Game {
             }
         }
 
-        // Debug: log once
         const scale = 0.25; // Map scale factor
         ctx.lineWidth = 3;
 
@@ -3012,6 +3008,9 @@ export class Game {
             // White shapes always show
             if (shape.alwaysVisible) {
                 shouldRender = true;
+            } else if (shape.isVent) {
+                // Vent shapes only show for impostors
+                shouldRender = isImpostor;
             } else if (shape.imposterOnly) {
                 // Imposter-only shapes show for imposters (already filtered above)
                 shouldRender = true;
@@ -3141,9 +3140,12 @@ export class Game {
         const drawY = 10;
 
         // Calculate task completion percentage
-        const totalTasks = this.tasks.length;
-        const completedTasks = this.tasks.filter(t => t.completed).length;
-        const progress = totalTasks > 0 ? completedTasks / totalTasks : 0;
+        // Impostors completing tasks don't contribute to task bar
+        let progress = 0;
+        if (!this.localPlayer?.isImpostor && this.tasks.length > 0) {
+            const completedTasks = this.tasks.filter(t => t.completed).length;
+            progress = completedTasks / this.tasks.length;
+        }
 
         // The green fill area inside the bar
         const fillStartX = 20;  // Where green fill starts in sprite
@@ -4226,6 +4228,9 @@ export class Game {
         this.meetingType = type;
         this.meetingCallerId = callerId;
 
+        // Clear dead bodies immediately when meeting is called (body was reported)
+        this.deadBodies = [];
+
         // Reset meeting state
         this.chatOpen = false;
         this.chatMessages = [];
@@ -5199,15 +5204,9 @@ export class Game {
 
     onPlayerVoted(data) {
         // A player voted
-        console.log('=== VOTE RECEIVED ===');
-        console.log('Voter ID:', data.voterId);
-        console.log('Players in map:', [...this.players.keys()]);
         const voter = this.players.get(data.voterId);
         if (voter) {
             voter.hasVoted = true;
-            console.log('Voter found, hasVoted set to true for:', voter.name);
-        } else {
-            console.warn('Voter NOT FOUND in players map!');
         }
 
         // Track who voted for whom (for showing voter icons)
@@ -5287,9 +5286,6 @@ export class Game {
 
     // MedScan specific - another player started the scanning animation
     onPlayerMedScanStart(data) {
-        console.log('=== onPlayerMedScanStart ===');
-        console.log('Data:', data);
-        console.log('Players in map:', [...this.players.keys()]);
         const player = this.players.get(data.playerId);
         if (player && player !== this.localPlayer) {
             player.isScanningMedBay = true;
@@ -5299,20 +5295,14 @@ export class Game {
             // Move player to scan position
             player.x = 922;
             player.y = 533;
-            console.log(`${player.name} started MedScan animation - isScanningMedBay:`, player.isScanningMedBay);
-        } else {
-            console.log('Player not found or is local player');
         }
     }
 
     onPlayerMedScanEnd(data) {
-        console.log('=== onPlayerMedScanEnd ===');
-        console.log('Data:', data);
         const player = this.players.get(data.playerId);
         if (player && player !== this.localPlayer) {
             player.isScanningMedBay = false;
             player.visible = true; // Show player sprite again
-            console.log(`${player.name} finished MedScan animation`);
         } else {
             console.log('Player not found or is local player');
         }
