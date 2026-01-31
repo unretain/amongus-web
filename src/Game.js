@@ -665,8 +665,103 @@ export class Game {
 
         console.log('Assets loaded');
 
+        // Load map shapes from JSON (custom drawn task areas)
+        await this.loadMapShapes();
+
         // Start theme music on menu
         this.playThemeMusic();
+    }
+
+    async loadMapShapes() {
+        try {
+            const response = await fetch('/assets/map-shapes.json');
+            const shapes = await response.json();
+            this.mapShapes = shapes;
+            console.log(`Loaded ${shapes.length} map shapes`);
+
+            // Process shapes and associate with tasks based on proximity
+            this.processMapShapes();
+        } catch (e) {
+            console.warn('Failed to load map shapes:', e);
+            this.mapShapes = [];
+        }
+    }
+
+    processMapShapes() {
+        // Task definitions with their coordinates (in full map scale 8564x4793)
+        const taskLocations = [
+            { name: 'Align Engine Output', room: 'Upper Engine', x: 1847, y: 653 },
+            { name: 'Align Engine Output', room: 'Lower Engine', x: 1709, y: 2885 },
+            { name: 'Unlock Manifolds', room: 'Reactor', x: 1348, y: 1787 },
+            { name: 'Start Reactor', room: 'Reactor', x: 1348, y: 1787 },
+            { name: 'Divert Power', room: 'Electrical', x: 3328, y: 2535 },
+            { name: 'Fix Wiring', room: 'Electrical', x: 3561, y: 2605 },
+            { name: 'Download Data', room: 'Electrical', x: 3198, y: 2534 },
+            { name: 'Swipe Card', room: 'Admin', x: 5201, y: 2379 },
+            { name: 'Fix Wiring', room: 'Admin', x: 5201, y: 2379 },
+            { name: 'Upload Data', room: 'Admin', x: 5403, y: 2343 },
+            { name: 'Prime Shields', room: 'Shields', x: 6060, y: 3759 },
+            { name: 'Stabilize Steering', room: 'Navigation', x: 6881, y: 3045 },
+            { name: 'Chart Course', room: 'Navigation', x: 8360, y: 2100 },
+            { name: 'Accept Diverted Power', room: 'O2', x: 6460, y: 1673 },
+            { name: 'Clean O2 Filter', room: 'O2', x: 6460, y: 1673 },
+            { name: 'Clear Asteroids', room: 'Weapons', x: 7565, y: 1908 },
+            { name: 'Accept Diverted Power', room: 'Weapons', x: 7565, y: 1908 },
+            { name: 'Accept Diverted Power', room: 'Navigation', x: 7835, y: 1668 },
+            { name: 'Fix Wiring', room: 'Cafeteria', x: 6512, y: 509 },
+            { name: 'Download Data', room: 'Cafeteria', x: 6512, y: 509 },
+            { name: 'Submit Scan', room: 'MedBay', x: 6164, y: 1732 },
+            { name: 'Inspect Sample', room: 'MedBay', x: 6000, y: 2800 },
+            { name: 'Accept Diverted Power', room: 'Communications', x: 5652, y: 3731 },
+            { name: 'Fix Wiring', room: 'Security', x: 4605, y: 2791 },
+            { name: 'Accept Diverted Power', room: 'Security', x: 4605, y: 2791 },
+            { name: 'Empty Garbage', room: 'Cafeteria', x: 5610, y: 350 },
+            { name: 'Fix Wiring', room: 'Storage', x: 6321, y: 3703 },
+            { name: 'Fuel Engines', room: 'Storage', x: 6321, y: 3703 },
+            { name: 'Empty Chute', room: 'O2', x: 7045, y: 875 },
+            { name: 'Empty Garbage', room: 'Storage', x: 4030, y: 300 },
+            { name: 'Calibrate Distributor', room: 'Electrical', x: 3660, y: 2180 },
+        ];
+
+        // Associate each shape with the nearest task
+        const scale = 0.25;
+        for (const shape of this.mapShapes) {
+            // Get shape center coordinates
+            let shapeX, shapeY;
+            if (shape.type === 'box') {
+                shapeX = shape.x + shape.width / 2;
+                shapeY = shape.y + shape.height / 2;
+            } else if (shape.type === 'line') {
+                shapeX = (shape.x1 + shape.x2) / 2;
+                shapeY = (shape.y1 + shape.y2) / 2;
+            }
+
+            // Find nearest task (within 300 pixels in full map scale)
+            let nearestTask = null;
+            let nearestDist = 300;
+            for (const task of taskLocations) {
+                const dx = shapeX - task.x;
+                const dy = shapeY - task.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < nearestDist) {
+                    nearestDist = dist;
+                    nearestTask = task;
+                }
+            }
+
+            // Assign task to shape
+            if (nearestTask) {
+                shape.taskName = nearestTask.name;
+                shape.taskRoom = nearestTask.room;
+            }
+
+            // Check if white/always visible (white stroke color)
+            if (shape.strokeColor === '#ffffff') {
+                shape.alwaysVisible = true;
+            }
+        }
+
+        console.log('Map shapes processed with task associations');
     }
 
     async loadMinimapData() {
@@ -2811,7 +2906,7 @@ export class Game {
     }
 
     renderTaskBoxes(ctx, camera) {
-        if (!this.taskBoxes || !this.localPlayer) return;
+        if (!this.mapShapes || !this.localPlayer) return;
 
         // Build set of task keys player has (incomplete AND enabled tasks only)
         const playerTaskKeys = new Set();
@@ -2827,28 +2922,54 @@ export class Game {
         if (!this._loggedTaskKeys) {
             console.log('=== TASK MATCHING DEBUG ===');
             console.log('Player tasks:', Array.from(playerTaskKeys));
-            console.log('Available boxes:', this.taskBoxes.filter(b => b.taskName).map(b => `${b.taskName}|${b.taskRoom}`));
+            console.log('Map shapes with tasks:', this.mapShapes.filter(s => s.taskName).map(s => `${s.taskName}|${s.taskRoom}`));
             this._loggedTaskKeys = true;
         }
 
+        const scale = 0.25; // Map scale factor
         ctx.lineWidth = 3;
 
-        for (const box of this.taskBoxes) {
-            // White boxes always show
-            if (box.alwaysVisible) {
-                ctx.strokeStyle = box.color;
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-                ctx.fillRect(box.x - camera.x, box.y - camera.y, box.w, box.h);
-                ctx.strokeRect(box.x - camera.x, box.y - camera.y, box.w, box.h);
-            } else if (box.taskName && box.taskRoom) {
+        for (const shape of this.mapShapes) {
+            // Determine if this shape should be rendered
+            let shouldRender = false;
+            let fillColor = 'rgba(255, 204, 0, 0.25)';
+            let strokeColor = shape.strokeColor || '#ffcc00';
+
+            // White shapes always show
+            if (shape.alwaysVisible) {
+                shouldRender = true;
+                fillColor = 'rgba(255, 255, 255, 0.15)';
+            } else if (shape.taskName && shape.taskRoom) {
                 // Check if player has this task
-                const boxKey = `${box.taskName}|${box.taskRoom}`;
-                if (playerTaskKeys.has(boxKey)) {
-                    ctx.strokeStyle = box.color;
-                    ctx.fillStyle = 'rgba(255, 204, 0, 0.25)';
-                    ctx.fillRect(box.x - camera.x, box.y - camera.y, box.w, box.h);
-                    ctx.strokeRect(box.x - camera.x, box.y - camera.y, box.w, box.h);
+                const shapeKey = `${shape.taskName}|${shape.taskRoom}`;
+                if (playerTaskKeys.has(shapeKey)) {
+                    shouldRender = true;
                 }
+            }
+
+            if (!shouldRender) continue;
+
+            ctx.strokeStyle = strokeColor;
+            ctx.fillStyle = fillColor;
+
+            if (shape.type === 'box') {
+                // Render rectangle (scaled from full map coordinates)
+                const x = shape.x * scale - camera.x;
+                const y = shape.y * scale - camera.y;
+                const w = shape.width * scale;
+                const h = shape.height * scale;
+                ctx.fillRect(x, y, w, h);
+                ctx.strokeRect(x, y, w, h);
+            } else if (shape.type === 'line') {
+                // Render line (scaled from full map coordinates)
+                const x1 = shape.x1 * scale - camera.x;
+                const y1 = shape.y1 * scale - camera.y;
+                const x2 = shape.x2 * scale - camera.x;
+                const y2 = shape.y2 * scale - camera.y;
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
             }
         }
     }
