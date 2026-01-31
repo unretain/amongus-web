@@ -816,42 +816,77 @@ export class Game {
         const s = 0.25;
 
         // Define all possible multi-step tasks (Divert Power pairs)
-        // Divert Power panel is ALWAYS in Electrical - coordinates match taskBox
+        // Divert Power panel is ALWAYS in Electrical - coordinates match taskBox in map-shapes.json
         const allMultiTasks = [
             () => {
-                const receive = new ReceivePowerTask('Weapons', Math.round(7565.93 * s), Math.round(1908.04 * s));
-                const divert = new DivertPowerTask('Electrical', Math.round(3328.45 * s), Math.round(2535.62 * s), 'Weapons', receive);
+                const receive = new ReceivePowerTask('Weapons', Math.round(7032.21 * s), Math.round(834.18 * s));
+                const divert = new DivertPowerTask('Electrical', Math.round(3326.37 * s), Math.round(2533.29 * s), 'Weapons', receive);
                 return [divert, receive];
             },
             () => {
-                const receive = new ReceivePowerTask('O2', Math.round(6460.40 * s), Math.round(1673.22 * s));
-                const divert = new DivertPowerTask('Electrical', Math.round(3328.45 * s), Math.round(2535.62 * s), 'O2', receive);
+                const receive = new ReceivePowerTask('O2', Math.round(6460.33 * s), Math.round(1672.11 * s));
+                const divert = new DivertPowerTask('Electrical', Math.round(3326.37 * s), Math.round(2533.29 * s), 'O2', receive);
                 return [divert, receive];
             },
             () => {
-                const receive = new ReceivePowerTask('Navigation', Math.round(7835.93 * s), Math.round(1668.93 * s));
-                const divert = new DivertPowerTask('Electrical', Math.round(3328.45 * s), Math.round(2535.62 * s), 'Navigation', receive);
+                const receive = new ReceivePowerTask('Navigation', Math.round(7837.76 * s), Math.round(1666.21 * s));
+                const divert = new DivertPowerTask('Electrical', Math.round(3326.37 * s), Math.round(2533.29 * s), 'Navigation', receive);
+                return [divert, receive];
+            },
+            () => {
+                const receive = new ReceivePowerTask('Security', Math.round(2787.55 * s), Math.round(1761.35 * s));
+                const divert = new DivertPowerTask('Electrical', Math.round(3326.37 * s), Math.round(2533.29 * s), 'Security', receive);
+                return [divert, receive];
+            },
+            () => {
+                const receive = new ReceivePowerTask('Communications', Math.round(6057.77 * s), Math.round(3755.48 * s));
+                const divert = new DivertPowerTask('Electrical', Math.round(3326.37 * s), Math.round(2533.29 * s), 'Communications', receive);
+                return [divert, receive];
+            },
+            () => {
+                const receive = new ReceivePowerTask('Lower Engine', Math.round(1706.91 * s), Math.round(2886.20 * s));
+                const divert = new DivertPowerTask('Electrical', Math.round(3326.37 * s), Math.round(2533.29 * s), 'Lower Engine', receive);
+                return [divert, receive];
+            },
+            () => {
+                const receive = new ReceivePowerTask('Upper Engine', Math.round(1849.13 * s), Math.round(657.49 * s));
+                const divert = new DivertPowerTask('Electrical', Math.round(3326.37 * s), Math.round(2533.29 * s), 'Upper Engine', receive);
                 return [divert, receive];
             },
             () => {
                 // Download/Upload Data - Cafeteria download location matches taskBox
                 const upload = new UploadDataTask('Admin', Math.round(5403.50 * s), Math.round(2343.15 * s));
-                const download = new DownloadDataTask('Cafeteria', Math.round(6512.07 * s), Math.round(509.78 * s), upload);
+                const download = new DownloadDataTask('Cafeteria', Math.round(5593.29 * s), Math.round(317.02 * s), upload);
                 return [download, upload];
             },
             () => {
                 // Download/Upload Data - Electrical download location matches taskBox
                 const upload = new UploadDataTask('Admin', Math.round(5403.50 * s), Math.round(2343.15 * s));
-                const download = new DownloadDataTask('Electrical', Math.round(3198.96 * s), Math.round(2534.02 * s), upload);
+                const download = new DownloadDataTask('Electrical', Math.round(3194.48 * s), Math.round(2531.20 * s), upload);
+                return [download, upload];
+            },
+            () => {
+                // Download/Upload Data - Communications download location matches taskBox
+                const upload = new UploadDataTask('Admin', Math.round(5403.50 * s), Math.round(2343.15 * s));
+                const download = new DownloadDataTask('Communications', Math.round(5650.92 * s), Math.round(3731.70 * s), upload);
+                return [download, upload];
+            },
+            () => {
+                // Download/Upload Data - Weapons download location matches taskBox
+                const upload = new UploadDataTask('Admin', Math.round(5403.50 * s), Math.round(2343.15 * s));
+                const download = new DownloadDataTask('Weapons', Math.round(6515.70 * s), Math.round(505.33 * s), upload);
                 return [download, upload];
             }
         ];
 
-        // Define all possible single tasks - coordinates match taskBoxes
+        // Define all possible single tasks - coordinates match taskBoxes in map-shapes.json
         const allSingleTasks = [
-            () => new WiresTask('Cafeteria', Math.round(6512.07 * s), Math.round(509.78 * s)),
-            () => new WiresTask('Admin', Math.round(5201.62 * s), Math.round(2379.43 * s)),
-            () => new WiresTask('Electrical', Math.round(3561.85 * s), Math.round(2605.96 * s)),
+            () => new WiresTask('Cafeteria', Math.round(4010.58 * s), Math.round(299.06 * s)),
+            () => new WiresTask('Admin', Math.round(5201.56 * s), Math.round(2379.38 * s)),
+            () => new WiresTask('Electrical', Math.round(3558.74 * s), Math.round(2604.47 * s)),
+            () => new WiresTask('Security', Math.round(2149.04 * s), Math.round(2054.57 * s)),
+            () => new WiresTask('Storage', Math.round(4604.62 * s), Math.round(2790.27 * s)),
+            () => new WiresTask('Navigation', Math.round(7570.57 * s), Math.round(1907.44 * s)),
             () => new MedScanTask('MedBay', Math.round(6164.63 * s), Math.round(1732.32 * s)),
             () => new StabilizeSteeringTask('Navigation', Math.round(6881.58 * s), Math.round(3045.87 * s)),
             () => new ClearAsteroidsTask('Weapons', Math.round(7565.93 * s), Math.round(1908.04 * s)),
