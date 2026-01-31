@@ -117,9 +117,9 @@ export class Game {
         this.killRange = 100; // 1 meter = 100 pixels (approximately)
 
         // Vision settings (in game pixels, before zoom - multiplied by 2x zoom)
-        this.crewmateVision = 100; // Crewmate: 200px effective radius (very limited)
-        this.impostorVision = 140; // Impostor: 280px effective radius
-        this.ghostVision = 400; // Ghost: 800px effective radius
+        this.crewmateVision = 300; // Crewmate vision radius
+        this.impostorVision = 400; // Impostor vision radius
+        this.ghostVision = 600; // Ghost vision radius
 
         // Vent cooldown state (imposter)
         this.ventCooldown = 0; // Cooldown timer in seconds
@@ -2150,20 +2150,20 @@ export class Game {
         const centerX = this.width / 2;
         const centerY = this.height / 2;
 
-        // Create an offscreen canvas for the vision mask
         ctx.save();
 
-        // Draw black overlay with a circular hole cut out
-        ctx.fillStyle = '#000000';
-        ctx.beginPath();
+        // Create radial gradient from center (transparent) to edge (black)
+        const gradient = ctx.createRadialGradient(
+            centerX, centerY, visionRadius * 0.7,  // Inner circle (fully visible)
+            centerX, centerY, visionRadius * 1.3   // Outer circle (fully dark)
+        );
+        gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');      // Transparent at center
+        gradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.3)');  // Start fading
+        gradient.addColorStop(0.8, 'rgba(0, 0, 0, 0.7)');  // Getting darker
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 1)');      // Fully black at edge
 
-        // Draw outer rectangle (full screen)
-        ctx.rect(0, 0, this.width, this.height);
-
-        // Draw inner circle (counter-clockwise to cut out)
-        ctx.arc(centerX, centerY, visionRadius, 0, Math.PI * 2, true);
-
-        ctx.fill('evenodd');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, this.width, this.height);
 
         ctx.restore();
     }
