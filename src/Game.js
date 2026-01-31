@@ -157,6 +157,9 @@ export class Game {
         // Dead bodies array
         this.deadBodies = [];
 
+        // Initialize mapShapes as empty array (will be populated by loadMapShapes)
+        this.mapShapes = [];
+
         this.initTasks();
 
         // Task location boxes from map editor (scaled from 8564x4793 full map to game scale 0.25)
