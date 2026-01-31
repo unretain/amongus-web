@@ -2811,53 +2811,33 @@ export class Game {
     }
 
     renderTaskBoxes(ctx, camera) {
-        if (!this.taskBoxes || !this.localPlayer) return;
+        if (!this.localPlayer) return;
 
-        // Get specific task keys (taskName|taskRoom) and room names for incomplete tasks
-        const playerTaskKeys = new Set();
-        const playerTaskRooms = new Set();
+        ctx.lineWidth = 3;
+
+        // Draw yellow boxes directly at each incomplete task's location
         if (this.tasks) {
             for (const task of this.tasks) {
                 if (!task.completed && task.enabled !== false) {
-                    // Create key matching the format from task-box-editor
-                    const key = `${task.name}|${task.room}`;
-                    playerTaskKeys.add(key);
-                    playerTaskRooms.add(task.room);
+                    // Draw a yellow box centered on the task location
+                    const boxSize = 60;
+                    const boxX = task.x - boxSize / 2;
+                    const boxY = task.y - boxSize / 2;
+
+                    ctx.strokeStyle = '#ffcc00';
+                    ctx.fillStyle = 'rgba(255, 204, 0, 0.25)';
+                    ctx.fillRect(boxX - camera.x, boxY - camera.y, boxSize, boxSize);
+                    ctx.strokeRect(boxX - camera.x, boxY - camera.y, boxSize, boxSize);
                 }
             }
         }
 
-        // Debug: log player task keys once per second
-        if (!this._lastTaskKeyLog || Date.now() - this._lastTaskKeyLog > 5000) {
-            console.log('Player task keys:', Array.from(playerTaskKeys));
-            console.log('Task box keys:', this.taskBoxes.filter(b => b.taskName).map(b => `${b.taskName}|${b.taskRoom}`));
-            this._lastTaskKeyLog = Date.now();
-        }
-
-        ctx.lineWidth = 2;
-
-        for (const box of this.taskBoxes) {
-            // White boxes always show
-            if (box.alwaysVisible) {
-                ctx.strokeStyle = box.color;
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-                ctx.fillRect(box.x - camera.x, box.y - camera.y, box.w, box.h);
-                ctx.strokeRect(box.x - camera.x, box.y - camera.y, box.w, box.h);
-            } else {
-                // Check if player has this specific task
-                let showBox = false;
-                if (box.taskName && box.taskRoom) {
-                    // New format: match by specific taskName AND taskRoom
-                    const boxKey = `${box.taskName}|${box.taskRoom}`;
-                    showBox = playerTaskKeys.has(boxKey);
-                } else if (box.taskRoom) {
-                    // Legacy format: match by room only (backward compatible)
-                    showBox = playerTaskRooms.has(box.taskRoom);
-                }
-
-                if (showBox) {
+        // Also draw white boxes (always visible) from taskBoxes array
+        if (this.taskBoxes) {
+            for (const box of this.taskBoxes) {
+                if (box.alwaysVisible) {
                     ctx.strokeStyle = box.color;
-                    ctx.fillStyle = 'rgba(255, 204, 0, 0.15)';
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
                     ctx.fillRect(box.x - camera.x, box.y - camera.y, box.w, box.h);
                     ctx.strokeRect(box.x - camera.x, box.y - camera.y, box.w, box.h);
                 }
