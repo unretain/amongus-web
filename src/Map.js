@@ -214,7 +214,7 @@ export class GameMap {
         return { ...this.spawnPoint };
     }
 
-    getVentAt(x, y, radius = 50) {
+    getVentAt(x, y, radius = 30) {
         for (const vent of this.vents) {
             const dx = x - vent.x;
             const dy = y - vent.y;

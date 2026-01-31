@@ -1847,7 +1847,7 @@ export class Game {
     getNearbyTask() {
         if (!this.localPlayer) return null;
 
-        const taskRadius = 100; // How close player needs to be to use task
+        const taskRadius = 50; // How close player needs to be to use task
 
         // Check regular tasks
         for (const task of this.tasks) {
@@ -6662,7 +6662,7 @@ export class Game {
         ctx.strokeRect(2188 * s - camera.x, 768 * s - camera.y, 108 * s, 84 * s);
 
         // OLD task-based debug (keep for reference)
-        const taskRadius = 100;
+        const taskRadius = 50;
 
         ctx.strokeStyle = '#00FF00';
         ctx.lineWidth = 1;
