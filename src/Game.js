@@ -2823,6 +2823,14 @@ export class Game {
             }
         }
 
+        // Debug: log once
+        if (!this._loggedTaskKeys) {
+            console.log('=== TASK MATCHING DEBUG ===');
+            console.log('Player tasks:', Array.from(playerTaskKeys));
+            console.log('Available boxes:', this.taskBoxes.filter(b => b.taskName).map(b => `${b.taskName}|${b.taskRoom}`));
+            this._loggedTaskKeys = true;
+        }
+
         ctx.lineWidth = 3;
 
         for (const box of this.taskBoxes) {
