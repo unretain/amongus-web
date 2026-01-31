@@ -79,6 +79,11 @@ export class GameMap {
         return true; // White/bright = blocked (walls)
     }
 
+    // Alias for raycasting - check if a point is a wall
+    isWall(x, y) {
+        return this.isPixelBlocked(x, y);
+    }
+
     initSkeld() {
         // Room positions for 8564x4793 map, scaled by 0.25
         const s = this.scale;

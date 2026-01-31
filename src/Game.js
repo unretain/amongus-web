@@ -2131,15 +2131,15 @@ export class Game {
         if (!this.localPlayer) return;
 
         // Skip vision during meetings or full-screen overlays
-        // But keep vision for world tasks like MedScan where player is still visible
         const isFullScreenTask = this.activeTask && !this.activeTask.isWorldTask;
         if (this.meetingActive || isFullScreenTask || this.adminMapOpen || this.sabotageMenuOpen) return;
+
+        // Ghosts have infinite vision
+        if (this.localPlayer.isDead && this.ghostVision === null) return;
 
         // Determine vision radius based on player state
         let visionRadius;
         if (this.localPlayer.isDead) {
-            // Ghosts have infinite vision - skip overlay entirely
-            if (this.ghostVision === null) return;
             visionRadius = this.ghostVision;
         } else if (this.localPlayer.isImpostor) {
             visionRadius = this.impostorVision;
@@ -2147,46 +2147,105 @@ export class Game {
             visionRadius = this.crewmateVision;
         }
 
-        // Apply zoom to vision radius
-        visionRadius *= this.cameraZoom;
+        // Get collision mask for raycasting
+        const collisionMask = this.map?.collisionMask;
+        if (!collisionMask) {
+            // Fallback to simple circular vision if no collision mask
+            this.drawSimpleVisionOverlay(ctx, visionRadius);
+            return;
+        }
 
-        // Player is at center of screen
+        const playerX = this.localPlayer.x;
+        const playerY = this.localPlayer.y;
         const centerX = this.width / 2;
         const centerY = this.height / 2;
 
-        // Calculate distance to farthest corner to ensure full coverage
-        const maxDist = Math.sqrt(Math.max(centerX, this.width - centerX) ** 2 + Math.max(centerY, this.height - centerY) ** 2);
+        // Cast rays to build visibility polygon
+        const numRays = 180; // Number of rays (more = smoother but slower)
+        const visibilityPoints = [];
+
+        for (let i = 0; i < numRays; i++) {
+            const angle = (i / numRays) * Math.PI * 2;
+            const rayEnd = this.castRay(playerX, playerY, angle, visionRadius, collisionMask);
+
+            // Convert world coords to screen coords
+            const screenX = (rayEnd.x - this.camera.x) * this.cameraZoom;
+            const screenY = (rayEnd.y - this.camera.y) * this.cameraZoom;
+            visibilityPoints.push({ x: screenX, y: screenY });
+        }
 
         ctx.save();
 
-        // Create radial gradient from center (transparent) to edge (black)
-        const gradient = ctx.createRadialGradient(
-            centerX, centerY, visionRadius * 0.8,  // Inner circle (fully visible)
-            centerX, centerY, maxDist + 50         // Outer circle extends to corners
-        );
-        gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');      // Transparent at center
-        gradient.addColorStop(0.15, 'rgba(0, 0, 0, 0.1)'); // Very slight fade
-        gradient.addColorStop(0.3, 'rgba(0, 0, 0, 0.4)');  // Start fading more
-        gradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.75)'); // Getting darker
-        gradient.addColorStop(0.7, 'rgba(0, 0, 0, 0.95)'); // Almost black
-        gradient.addColorStop(1, 'rgba(0, 0, 0, 1)');      // Fully black at edge
-
-        ctx.fillStyle = gradient;
+        // Fill entire screen with black
+        ctx.fillStyle = '#000000';
         ctx.fillRect(0, 0, this.width, this.height);
 
-        // Add grainy noise by drawing random semi-transparent dots (lighter on performance)
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-        for (let i = 0; i < 500; i++) {
-            const x = Math.random() * this.width;
-            const y = Math.random() * this.height;
-            const dist = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
-            // Only add noise outside the clear vision area
-            if (dist > visionRadius * 0.7) {
-                const size = Math.random() * 3 + 1;
-                ctx.fillRect(x, y, size, size);
+        // Cut out the visible area using composite operation
+        ctx.globalCompositeOperation = 'destination-out';
+
+        // Draw visibility polygon with gradient
+        const gradient = ctx.createRadialGradient(
+            centerX, centerY, 0,
+            centerX, centerY, visionRadius * this.cameraZoom
+        );
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+        gradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.9)');
+        gradient.addColorStop(1, 'rgba(255, 255, 255, 0.3)');
+
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        if (visibilityPoints.length > 0) {
+            ctx.moveTo(visibilityPoints[0].x, visibilityPoints[0].y);
+            for (let i = 1; i < visibilityPoints.length; i++) {
+                ctx.lineTo(visibilityPoints[i].x, visibilityPoints[i].y);
+            }
+            ctx.closePath();
+        }
+        ctx.fill();
+
+        ctx.restore();
+    }
+
+    // Cast a ray from player position and return where it hits a wall or max distance
+    castRay(startX, startY, angle, maxDist, collisionMask) {
+        const stepSize = 4; // Check every 4 pixels for performance
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+
+        for (let dist = 0; dist < maxDist; dist += stepSize) {
+            const x = startX + cos * dist;
+            const y = startY + sin * dist;
+
+            // Check if this point hits a wall
+            if (this.map.isWall(x, y)) {
+                return { x, y };
             }
         }
 
+        // No wall hit, return max distance point
+        return {
+            x: startX + cos * maxDist,
+            y: startY + sin * maxDist
+        };
+    }
+
+    // Simple circular vision fallback
+    drawSimpleVisionOverlay(ctx, visionRadius) {
+        const centerX = this.width / 2;
+        const centerY = this.height / 2;
+        const maxDist = Math.sqrt(this.width ** 2 + this.height ** 2);
+
+        ctx.save();
+        const gradient = ctx.createRadialGradient(
+            centerX, centerY, visionRadius * this.cameraZoom * 0.8,
+            centerX, centerY, maxDist
+        );
+        gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+        gradient.addColorStop(0.3, 'rgba(0, 0, 0, 0.5)');
+        gradient.addColorStop(0.6, 'rgba(0, 0, 0, 0.85)');
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 1)');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, this.width, this.height);
         ctx.restore();
     }
 
