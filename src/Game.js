@@ -2998,7 +2998,16 @@ export class Game {
         if (!this._loggedOutlineDebug) {
             console.log('=== OUTLINE DEBUG ===');
             console.log('Player task keys:', Array.from(playerTaskKeys));
-            console.log('Shape task keys:', this.mapShapes?.filter(s => s.taskName).map(s => `${s.taskName}|${s.taskRoom}`).filter((v, i, a) => a.indexOf(v) === i));
+            const uniqueShapeKeys = this.mapShapes?.filter(s => s.taskName).map(s => `${s.taskName}|${s.taskRoom}`).filter((v, i, a) => a.indexOf(v) === i);
+            console.log('Unique shape task keys:', uniqueShapeKeys);
+            console.log('mapShapes count:', this.mapShapes?.length);
+            console.log('Line shapes count:', this.mapShapes?.filter(s => s.type === 'line').length);
+            console.log('Box shapes count:', this.mapShapes?.filter(s => s.type === 'box').length);
+            // Check which player tasks have matching shapes
+            for (const key of playerTaskKeys) {
+                const hasShape = this.mapShapes?.some(s => `${s.taskName}|${s.taskRoom}` === key);
+                console.log(`Task "${key}" has shape: ${hasShape}`);
+            }
             this._loggedOutlineDebug = true;
         }
 
