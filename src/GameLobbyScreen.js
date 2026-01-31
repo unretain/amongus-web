@@ -764,7 +764,8 @@ export class GameLobbyScreen {
 
             // Grey out if not host OR during countdown OR not enough players
             const isCountingDown = this.startCountdown > 0;
-            const notEnoughPlayers = this.players.size < 4;
+            // TODO: Change back to 4 for production: const notEnoughPlayers = this.players.size < 4;
+            const notEnoughPlayers = this.players.size < 1;
             if (!this.isHost || isCountingDown || notEnoughPlayers) {
                 ctx.globalAlpha = 0.4;
             }
@@ -791,35 +792,26 @@ export class GameLobbyScreen {
                 ctx.fillText(countdownNum.toString(), laptopX + startSpriteW / 2, laptopY + startSpriteH / 2 + 70);
             }
 
-            // Draw error message ABOVE start button with red background (visible to all players)
-            if (this.errorMessage && this.errorMessageTimer > 0) {
-                const msgX = laptopX + startSpriteW / 2;
-                const msgY = laptopY - 45;
-                const msgPadding = 15;
+            // Draw hint message ABOVE start button when not enough players
+            if (notEnoughPlayers) {
+                // TODO: Change back to 4 for production: const hintText = 'At least 4 players must join to start';
+                const hintText = 'At least 1 player must join to start';
+                const hintX = laptopX + startSpriteW / 2;
+                const hintY = laptopY - 25;
 
-                ctx.font = 'bold 22px "Varela Round", Arial';
-                const textWidth = ctx.measureText(this.errorMessage).width;
-
-                // Draw red background box
-                ctx.fillStyle = 'rgba(200, 50, 50, 0.95)';
-                ctx.beginPath();
-                ctx.roundRect(msgX - textWidth / 2 - msgPadding, msgY - 22, textWidth + msgPadding * 2, 36, 8);
-                ctx.fill();
-
-                // Draw white border
-                ctx.strokeStyle = '#FFFFFF';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-
-                // Draw text
-                ctx.fillStyle = '#FFFFFF';
+                ctx.font = 'bold 20px "Varela Round", Arial';
                 ctx.textAlign = 'center';
-                ctx.fillText(this.errorMessage, msgX, msgY);
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 4;
+                ctx.strokeText(hintText, hintX, hintY);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillText(hintText, hintX, hintY);
             }
 
             // Only make clickable for host when NOT counting down and enough players
             if (this.isHost && !isCountingDown) {
-                const notEnoughPlayers = this.players.size < 4;
+                // TODO: Change back to 4 for production: const notEnoughPlayers = this.players.size < 4;
+                const notEnoughPlayers = this.players.size < 1;
                 this.startButton = {
                     x: laptopX,
                     y: laptopY,
@@ -855,8 +847,7 @@ export class GameLobbyScreen {
             if (!this.startButton.disabled) {
                 return 'start';
             }
-            // Show error message when clicking disabled button
-            this.showError('Need at least 4 players to start');
+            // Button is disabled - hint text already shows above
             return null;
         }
 
