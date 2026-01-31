@@ -642,10 +642,12 @@ export class Game {
             const response = await fetch('/assets/map-shapes.json');
             const shapes = await response.json();
             this.mapShapes = shapes;
-            console.log(`Loaded ${shapes.length} map shapes`);
 
             // Process shapes and associate with tasks based on proximity
             this.processMapShapes();
+
+            // Reinitialize tasks now that shapes are loaded with correct locations
+            this.initTasks();
         } catch (e) {
             console.warn('Failed to load map shapes:', e);
             this.mapShapes = [];
@@ -667,13 +669,15 @@ export class Game {
         }
 
         const taskLocations = [
-            { name: 'Align Engine Output', room: 'Upper Engine', x: 1847, y: 653 },
-            { name: 'Align Engine Output', room: 'Lower Engine', x: 1709, y: 2885 },
+            { name: 'Align Engine Output', room: 'Upper Engine', x: 1481, y: 1278 },
+            { name: 'Align Engine Output', room: 'Lower Engine', x: 1488, y: 3554 },
             { name: 'Unlock Manifolds', room: 'Reactor', x: 1348, y: 1787 },
             { name: 'Start Reactor', room: 'Reactor', x: 1348, y: 1787 },
             { name: 'Divert Power', room: 'Electrical', x: 3328, y: 2535 },
             { name: 'Fix Wiring', room: 'Electrical', x: 3561, y: 2605 },
-            { name: 'Download Data', room: 'Electrical', x: 3198, y: 2534 },
+            { name: 'Download Data', room: 'Electrical', x: 3194, y: 2531 },
+            { name: 'Download Data', room: 'Communications', x: 5651, y: 3732 },
+            { name: 'Download Data', room: 'Weapons', x: 6516, y: 505 },
             { name: 'Swipe Card', room: 'Admin', x: 5201, y: 2379 },
             { name: 'Fix Wiring', room: 'Admin', x: 5201, y: 2379 },
             { name: 'Upload Data', room: 'Admin', x: 5403, y: 2343 },
@@ -683,17 +687,20 @@ export class Game {
             { name: 'Accept Diverted Power', room: 'O2', x: 6460, y: 1673 },
             { name: 'Clean O2 Filter', room: 'O2', x: 6460, y: 1673 },
             { name: 'Clear Asteroids', room: 'Weapons', x: 7565, y: 1908 },
-            { name: 'Accept Diverted Power', room: 'Weapons', x: 7565, y: 1908 },
+            { name: 'Accept Diverted Power', room: 'Weapons', x: 7032, y: 834 },
             { name: 'Accept Diverted Power', room: 'Navigation', x: 7835, y: 1668 },
-            { name: 'Fix Wiring', room: 'Cafeteria', x: 6512, y: 509 },
-            { name: 'Download Data', room: 'Cafeteria', x: 6512, y: 509 },
+            { name: 'Fix Wiring', room: 'Cafeteria', x: 4011, y: 299 },
+            { name: 'Download Data', room: 'Cafeteria', x: 5593, y: 317 },
             { name: 'Submit Scan', room: 'MedBay', x: 6164, y: 1732 },
             { name: 'Inspect Sample', room: 'MedBay', x: 6000, y: 2800 },
-            { name: 'Accept Diverted Power', room: 'Communications', x: 5652, y: 3731 },
-            { name: 'Fix Wiring', room: 'Security', x: 4605, y: 2791 },
-            { name: 'Accept Diverted Power', room: 'Security', x: 4605, y: 2791 },
+            { name: 'Accept Diverted Power', room: 'Communications', x: 6058, y: 3755 },
+            { name: 'Accept Diverted Power', room: 'Lower Engine', x: 1707, y: 2886 },
+            { name: 'Accept Diverted Power', room: 'Upper Engine', x: 1849, y: 657 },
+            { name: 'Fix Wiring', room: 'Security', x: 2149, y: 2055 },
+            { name: 'Accept Diverted Power', room: 'Security', x: 2788, y: 1761 },
             { name: 'Empty Garbage', room: 'Cafeteria', x: 5610, y: 350 },
-            { name: 'Fix Wiring', room: 'Storage', x: 6321, y: 3703 },
+            { name: 'Fix Wiring', room: 'Storage', x: 4605, y: 2790 },
+            { name: 'Fix Wiring', room: 'Navigation', x: 7571, y: 1907 },
             { name: 'Fuel Engines', room: 'Storage', x: 6321, y: 3703 },
             { name: 'Empty Chute', room: 'O2', x: 7045, y: 875 },
             { name: 'Empty Garbage', room: 'Storage', x: 4030, y: 300 },
