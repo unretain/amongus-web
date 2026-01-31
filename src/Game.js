@@ -109,7 +109,7 @@ export class Game {
         this.activeTask = null;
         this.sabotageMenuOpen = false; // Imposter sabotage map overlay
         this.sabotageCooldown = 0; // Cooldown timer in seconds (30 sec max)
-        this.sabotageCooldownMax = 30; // 30 seconds cooldown
+        this.sabotageCooldownMax = 35; // 35 seconds cooldown
 
         // Kill cooldown state (imposter)
         this.killCooldown = 0; // Cooldown timer in seconds
@@ -2385,17 +2385,12 @@ export class Game {
         const screenW = ctx.canvas.width;
         const screenH = ctx.canvas.height;
 
-        // Pulsing red screen flash
+        // Pulsing red screen flash (no border)
         const flashSpeed = 4; // pulses per second
         const flash = Math.sin(Date.now() / 1000 * flashSpeed * Math.PI) * 0.5 + 0.5;
         const redAlpha = 0.15 + flash * 0.15; // 0.15 to 0.3 alpha
         ctx.fillStyle = `rgba(255, 0, 0, ${redAlpha})`;
         ctx.fillRect(0, 0, screenW, screenH);
-
-        // Draw red border around screen
-        ctx.strokeStyle = `rgba(255, 0, 0, ${0.5 + flash * 0.5})`;
-        ctx.lineWidth = 8;
-        ctx.strokeRect(4, 4, screenW - 8, screenH - 8);
     }
 
     // Render MedScan animation for other players who are scanning
@@ -2985,11 +2980,13 @@ export class Game {
     renderTaskBoxes(ctx, camera) {
         if (!this.mapShapes || !this.localPlayer) return;
 
-        // Build set of task keys player has (ALL incomplete tasks, regardless of enabled status)
+        // Build set of task keys player has (only incomplete AND enabled tasks)
         const playerTaskKeys = new Set();
         if (this.tasks) {
             for (const task of this.tasks) {
-                if (!task.completed) {
+                // Only show outline if task is not completed AND is enabled
+                // Multi-step tasks have enabled=false until previous step is done
+                if (!task.completed && task.enabled !== false) {
                     // Strip step suffix like "(1/3)" for shape matching
                     const baseName = task.name.replace(/\s*\(\d+\/\d+\)$/, '');
                     playerTaskKeys.add(`${baseName}|${task.room}`);
@@ -2997,25 +2994,8 @@ export class Game {
             }
         }
 
-        // Debug: log once per game
-        if (!this._loggedOutlineDebug) {
-            console.log('=== OUTLINE DEBUG ===');
-            console.log('Player task keys:', Array.from(playerTaskKeys));
-            const uniqueShapeKeys = this.mapShapes?.filter(s => s.taskName).map(s => `${s.taskName}|${s.taskRoom}`).filter((v, i, a) => a.indexOf(v) === i);
-            console.log('Unique shape task keys:', uniqueShapeKeys);
-            console.log('mapShapes count:', this.mapShapes?.length);
-            console.log('Line shapes count:', this.mapShapes?.filter(s => s.type === 'line').length);
-            console.log('Box shapes count:', this.mapShapes?.filter(s => s.type === 'box').length);
-            // Check which player tasks have matching shapes
-            for (const key of playerTaskKeys) {
-                const hasShape = this.mapShapes?.some(s => `${s.taskName}|${s.taskRoom}` === key);
-                console.log(`Task "${key}" has shape: ${hasShape}`);
-            }
-            this._loggedOutlineDebug = true;
-        }
-
         const scale = 0.25; // Map scale factor
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 1.5; // Thinner outlines
 
         // Check if player is impostor and in/near vent for vent range shapes
         const isImpostor = this.localPlayer.isImpostor;
@@ -3052,10 +3032,6 @@ export class Game {
             if (!shouldRender) continue;
 
             ctx.strokeStyle = strokeColor;
-
-            // Debug: count rendered shapes
-            if (!this._renderedShapeCounts) this._renderedShapeCounts = { box: 0, line: 0, roundedBox: 0 };
-            this._renderedShapeCounts[shape.type] = (this._renderedShapeCounts[shape.type] || 0) + 1;
 
             if (shape.type === 'box') {
                 // Render rectangle outline only (no fill)
@@ -3095,13 +3071,6 @@ export class Game {
                 ctx.lineTo(x2, y2);
                 ctx.stroke();
             }
-        }
-
-        // Debug: log rendered shape counts once per second
-        if (!this._lastShapeCountLog || Date.now() - this._lastShapeCountLog > 5000) {
-            console.log('Rendered shape counts:', this._renderedShapeCounts);
-            this._renderedShapeCounts = { box: 0, line: 0, roundedBox: 0 };
-            this._lastShapeCountLog = Date.now();
         }
     }
 
@@ -3439,16 +3408,29 @@ export class Game {
 
                 // Draw button (with cooldown or disabled state if applicable)
                 if (btn.cooldown !== undefined && btn.cooldown > 0) {
-                    // Cooldown animation (same as sabotage map buttons - progressive fill from right)
+                    // Circular cooldown animation (like real Among Us)
                     const cooldownProgress = 1 - (btn.cooldown / btn.cooldownMax);
                     ctx.save();
+
+                    // Draw grayed out button first
                     ctx.filter = 'grayscale(100%)';
                     ctx.drawImage(texture, sprite.x, sprite.y, sprite.w, sprite.h, btnX, btnY, btnW, btnH);
                     ctx.filter = 'none';
+
+                    // Create circular clip that reveals from top clockwise
+                    const centerX = btnX + btnW / 2;
+                    const centerY = btnY + btnH / 2;
+                    const radius = Math.max(btnW, btnH);
+                    const startAngle = -Math.PI / 2; // Start from top
+                    const endAngle = startAngle + (cooldownProgress * Math.PI * 2);
+
                     ctx.beginPath();
-                    const coloredWidth = btnW * cooldownProgress;
-                    ctx.rect(btnX + btnW - coloredWidth, btnY, coloredWidth, btnH);
+                    ctx.moveTo(centerX, centerY);
+                    ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+                    ctx.closePath();
                     ctx.clip();
+
+                    // Draw colored version on top (visible only in clipped pie area)
                     ctx.drawImage(texture, sprite.x, sprite.y, sprite.w, sprite.h, btnX, btnY, btnW, btnH);
                     ctx.restore();
                 } else if (btn.disabled) {
@@ -3679,10 +3661,10 @@ export class Game {
                     );
                     ctx.filter = 'none';
 
-                    // Clip to show colored portion from RIGHT side (progress fills from right to left)
+                    // Clip to show colored portion from LEFT side (progress fills from left to right)
                     ctx.beginPath();
                     const coloredWidth = btnW * cooldownProgress;
-                    ctx.rect(btnX + btnW - coloredWidth, btnY, coloredWidth, btnH);
+                    ctx.rect(btnX, btnY, coloredWidth, btnH);
                     ctx.clip();
 
                     // Draw colored version on top (visible only in clipped area)
@@ -4668,7 +4650,6 @@ export class Game {
 
         // Check cooldown for entering
         if (this.ventCooldown > 0) {
-            console.log(`Vent on cooldown: ${this.ventCooldown.toFixed(1)}s remaining`);
             return;
         }
 
