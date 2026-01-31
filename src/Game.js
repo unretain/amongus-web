@@ -117,9 +117,9 @@ export class Game {
         this.killRange = 100; // 1 meter = 100 pixels (approximately)
 
         // Vision settings (in game pixels, before zoom - multiplied by 2x zoom)
-        this.crewmateVision = 180; // Crewmate vision radius
-        this.impostorVision = 240; // Impostor vision radius
-        this.ghostVision = 500; // Ghost vision radius
+        this.crewmateVision = 120; // Crewmate vision radius
+        this.impostorVision = 160; // Impostor vision radius
+        this.ghostVision = null; // null = infinite vision for ghosts
 
         // Vent cooldown state (imposter)
         this.ventCooldown = 0; // Cooldown timer in seconds
@@ -2138,6 +2138,8 @@ export class Game {
         // Determine vision radius based on player state
         let visionRadius;
         if (this.localPlayer.isDead) {
+            // Ghosts have infinite vision - skip overlay entirely
+            if (this.ghostVision === null) return;
             visionRadius = this.ghostVision;
         } else if (this.localPlayer.isImpostor) {
             visionRadius = this.impostorVision;
