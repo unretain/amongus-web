@@ -2147,28 +2147,66 @@ export class Game {
             visionRadius = this.crewmateVision;
         }
 
-        // Apply zoom to vision radius
-        visionRadius *= this.cameraZoom;
-
+        const playerX = this.localPlayer.x;
+        const playerY = this.localPlayer.y;
         const centerX = this.width / 2;
         const centerY = this.height / 2;
-        const maxDist = Math.sqrt(this.width ** 2 + this.height ** 2);
+
+        // Cast rays to build visibility polygon
+        const numRays = 120;
+        const visibilityPoints = [];
+
+        for (let i = 0; i < numRays; i++) {
+            const angle = (i / numRays) * Math.PI * 2;
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+
+            let hitDist = visionRadius;
+
+            // Raycast to find walls - start at 20px to skip nearby geometry
+            for (let dist = 20; dist < visionRadius; dist += 6) {
+                const checkX = playerX + cos * dist;
+                const checkY = playerY + sin * dist;
+
+                if (this.map && this.map.isPixelBlocked && this.map.isPixelBlocked(checkX, checkY)) {
+                    hitDist = dist;
+                    break;
+                }
+            }
+
+            // Convert to screen coords
+            const screenX = centerX + cos * hitDist * this.cameraZoom;
+            const screenY = centerY + sin * hitDist * this.cameraZoom;
+            visibilityPoints.push({ x: screenX, y: screenY, dist: hitDist });
+        }
 
         ctx.save();
 
-        // Simple gradient vision
-        const gradient = ctx.createRadialGradient(
-            centerX, centerY, visionRadius * 0.8,
-            centerX, centerY, maxDist
-        );
-        gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
-        gradient.addColorStop(0.15, 'rgba(0, 0, 0, 0.2)');
-        gradient.addColorStop(0.3, 'rgba(0, 0, 0, 0.5)');
-        gradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.8)');
-        gradient.addColorStop(1, 'rgba(0, 0, 0, 1)');
+        // First fill entire screen with black
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, this.width, this.height);
+
+        // Cut out visibility polygon
+        ctx.globalCompositeOperation = 'destination-out';
+
+        // Draw visibility polygon with gradient falloff
+        ctx.beginPath();
+        ctx.moveTo(visibilityPoints[0].x, visibilityPoints[0].y);
+        for (let i = 1; i < visibilityPoints.length; i++) {
+            ctx.lineTo(visibilityPoints[i].x, visibilityPoints[i].y);
+        }
+        ctx.closePath();
+
+        // Use radial gradient for soft edges
+        const gradientRadius = visionRadius * this.cameraZoom;
+        const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, gradientRadius);
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+        gradient.addColorStop(0.6, 'rgba(255, 255, 255, 0.8)');
+        gradient.addColorStop(0.85, 'rgba(255, 255, 255, 0.3)');
+        gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
 
         ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, this.width, this.height);
+        ctx.fill();
 
         ctx.restore();
     }
