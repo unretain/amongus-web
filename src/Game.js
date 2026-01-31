@@ -2994,6 +2994,14 @@ export class Game {
             }
         }
 
+        // Debug: log once per game
+        if (!this._loggedOutlineDebug) {
+            console.log('=== OUTLINE DEBUG ===');
+            console.log('Player task keys:', Array.from(playerTaskKeys));
+            console.log('Shape task keys:', this.mapShapes?.filter(s => s.taskName).map(s => `${s.taskName}|${s.taskRoom}`).filter((v, i, a) => a.indexOf(v) === i));
+            this._loggedOutlineDebug = true;
+        }
+
         const scale = 0.25; // Map scale factor
         ctx.lineWidth = 3;
 
