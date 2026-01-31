@@ -172,6 +172,7 @@ export class Game {
             { x: 3561.85 * s, y: 2605.96 * s, w: 67.14 * s, h: 41.56 * s, color: '#ffcc00', taskName: 'Fix Wiring', taskRoom: 'Electrical' },
             { x: 3198.96 * s, y: 2534.02 * s, w: 65.54 * s, h: 59.15 * s, color: '#ffcc00', taskName: 'Download Data', taskRoom: 'Electrical' },
             { x: 5201.62 * s, y: 2379.43 * s, w: 67.91 * s, h: 42.79 * s, color: '#ffcc00', taskName: 'Swipe Card', taskRoom: 'Admin' },
+            { x: 5201.62 * s, y: 2379.43 * s, w: 67.91 * s, h: 42.79 * s, color: '#ffcc00', taskName: 'Fix Wiring', taskRoom: 'Admin' },
             { x: 5403.50 * s, y: 2343.15 * s, w: 66.05 * s, h: 61.40 * s, color: '#ffcc00', taskName: 'Upload Data', taskRoom: 'Admin' },
             { x: 6060.87 * s, y: 3759.42 * s, w: 73.37 * s, h: 51.36 * s, color: '#ffef3d', taskName: 'Prime Shields', taskRoom: 'Shields' },
             { x: 6881.58 * s, y: 3045.87 * s, w: 74.99 * s, h: 54.54 * s, color: '#ffef3d', taskName: 'Stabilize Steering', taskRoom: 'Navigation' },
@@ -181,9 +182,9 @@ export class Game {
             { x: 7835.93 * s, y: 1668.93 * s, w: 69.85 * s, h: 48.36 * s, color: '#ffef3d', taskName: 'Accept Diverted Power', taskRoom: 'Navigation' },
             { x: 6512.07 * s, y: 509.78 * s, w: 69.5 * s, h: 58.5 * s, color: '#ffef3d', taskName: 'Fix Wiring', taskRoom: 'Cafeteria' },
             { x: 6512.07 * s, y: 509.78 * s, w: 69.5 * s, h: 58.5 * s, color: '#ffef3d', taskName: 'Download Data', taskRoom: 'Cafeteria' },
+            { x: 6164.63 * s, y: 1732.32 * s, w: 57.72 * s, h: 55.04 * s, color: '#ffef3d', taskName: 'Submit Scan', taskRoom: 'MedBay' },
             // White boxes - always visible for everyone
             { x: 6122.30 * s, y: 2373.65 * s, w: 51.06 * s, h: 56.87 * s, color: '#ffffff', alwaysVisible: true },
-            { x: 6164.63 * s, y: 1732.32 * s, w: 57.72 * s, h: 55.04 * s, color: '#ffffff', alwaysVisible: true },
             { x: 1126.97 * s, y: 1447.45 * s, w: 57.47 * s, h: 84.41 * s, color: '#ffffff', alwaysVisible: true },
             { x: 1123.62 * s, y: 2859.21 * s, w: 56.56 * s, h: 13.57 * s, color: '#ffffff', alwaysVisible: true },
         ];
@@ -706,48 +707,51 @@ export class Game {
         const s = 0.25;
 
         // Define all possible multi-step tasks (Divert Power pairs)
+        // Divert Power panel is ALWAYS in Electrical - coordinates match taskBox
         const allMultiTasks = [
             () => {
-                const receive = new ReceivePowerTask('Weapons', Math.round(7036 * s), Math.round(873 * s));
-                const divert = new DivertPowerTask('Upper Engine', Math.round(1884 * s), Math.round(685 * s), 'Weapons', receive);
+                const receive = new ReceivePowerTask('Weapons', Math.round(7565.93 * s), Math.round(1908.04 * s));
+                const divert = new DivertPowerTask('Electrical', Math.round(3328.45 * s), Math.round(2535.62 * s), 'Weapons', receive);
                 return [divert, receive];
             },
             () => {
-                const receive = new ReceivePowerTask('O2', Math.round(6496 * s), Math.round(1701 * s));
-                const divert = new DivertPowerTask('Security', Math.round(2812 * s), Math.round(1801 * s), 'O2', receive);
+                const receive = new ReceivePowerTask('O2', Math.round(6460.40 * s), Math.round(1673.22 * s));
+                const divert = new DivertPowerTask('Electrical', Math.round(3328.45 * s), Math.round(2535.62 * s), 'O2', receive);
                 return [divert, receive];
             },
             () => {
-                const receive = new ReceivePowerTask('Navigation', Math.round(7876 * s), Math.round(1701 * s));
-                const divert = new DivertPowerTask('Reactor', Math.round(1388 * s), Math.round(1813 * s), 'Navigation', receive);
+                const receive = new ReceivePowerTask('Navigation', Math.round(7835.93 * s), Math.round(1668.93 * s));
+                const divert = new DivertPowerTask('Electrical', Math.round(3328.45 * s), Math.round(2535.62 * s), 'Navigation', receive);
                 return [divert, receive];
             },
             () => {
-                const upload = new UploadDataTask('Admin', Math.round(6140 * s), Math.round(3790 * s));
-                const download = new DownloadDataTask('Cafeteria', Math.round(5680 * s), Math.round(3765 * s), upload);
+                // Download/Upload Data - Cafeteria download location matches taskBox
+                const upload = new UploadDataTask('Admin', Math.round(5403.50 * s), Math.round(2343.15 * s));
+                const download = new DownloadDataTask('Cafeteria', Math.round(6512.07 * s), Math.round(509.78 * s), upload);
                 return [download, upload];
             },
             () => {
-                const upload = new UploadDataTask('Admin', Math.round(6140 * s), Math.round(3790 * s));
-                const download = new DownloadDataTask('Electrical', Math.round(3240 * s), Math.round(2565 * s), upload);
+                // Download/Upload Data - Electrical download location matches taskBox
+                const upload = new UploadDataTask('Admin', Math.round(5403.50 * s), Math.round(2343.15 * s));
+                const download = new DownloadDataTask('Electrical', Math.round(3198.96 * s), Math.round(2534.02 * s), upload);
                 return [download, upload];
             }
         ];
 
-        // Define all possible single tasks
+        // Define all possible single tasks - coordinates match taskBoxes
         const allSingleTasks = [
-            () => new WiresTask('Cafeteria', Math.round(4036 * s), Math.round(301 * s)),
-            () => new WiresTask('Admin', Math.round(5236 * s), Math.round(2397 * s)),
-            () => new WiresTask('Electrical', Math.round(3604 * s), Math.round(2629 * s)),
-            () => new MedScanTask('MedBay', 922, 533),
-            () => new StabilizeSteeringTask('Navigation', 2060, 554),
-            () => new ClearAsteroidsTask('Weapons', 1627, 229),
-            () => new SwipeCardTask('Admin', 1516, 705),
-            () => new UnlockManifoldsTask('Reactor', 250, 426),
-            () => new SimonSaysTask('Reactor', 292, 565),
-            () => new ShieldsTask('Shields', 1593, 962),
-            () => new EngineAlignTask('Upper Engine', 436, 265),
-            () => new EngineAlignTask('Lower Engine', 390, 904)
+            () => new WiresTask('Cafeteria', Math.round(6512.07 * s), Math.round(509.78 * s)),
+            () => new WiresTask('Admin', Math.round(5201.62 * s), Math.round(2379.43 * s)),
+            () => new WiresTask('Electrical', Math.round(3561.85 * s), Math.round(2605.96 * s)),
+            () => new MedScanTask('MedBay', Math.round(6164.63 * s), Math.round(1732.32 * s)),
+            () => new StabilizeSteeringTask('Navigation', Math.round(6881.58 * s), Math.round(3045.87 * s)),
+            () => new ClearAsteroidsTask('Weapons', Math.round(7565.93 * s), Math.round(1908.04 * s)),
+            () => new SwipeCardTask('Admin', Math.round(5201.62 * s), Math.round(2379.43 * s)),
+            () => new UnlockManifoldsTask('Reactor', Math.round(1348.83 * s), Math.round(1787.60 * s)),
+            () => new SimonSaysTask('Reactor', Math.round(1348.83 * s), Math.round(1787.60 * s)),
+            () => new ShieldsTask('Shields', Math.round(6060.87 * s), Math.round(3759.42 * s)),
+            () => new EngineAlignTask('Upper Engine', Math.round(1847.54 * s), Math.round(653.10 * s)),
+            () => new EngineAlignTask('Lower Engine', Math.round(1709.64 * s), Math.round(2885.95 * s))
         ];
 
         // Shuffle and select tasks

@@ -791,12 +791,30 @@ export class GameLobbyScreen {
                 ctx.fillText(countdownNum.toString(), laptopX + startSpriteW / 2, laptopY + startSpriteH / 2 + 70);
             }
 
-            // Draw error message below start button (visible to all players)
+            // Draw error message ABOVE start button with red background (visible to all players)
             if (this.errorMessage && this.errorMessageTimer > 0) {
+                const msgX = laptopX + startSpriteW / 2;
+                const msgY = laptopY - 45;
+                const msgPadding = 15;
+
+                ctx.font = 'bold 22px "Varela Round", Arial';
+                const textWidth = ctx.measureText(this.errorMessage).width;
+
+                // Draw red background box
+                ctx.fillStyle = 'rgba(200, 50, 50, 0.95)';
+                ctx.beginPath();
+                ctx.roundRect(msgX - textWidth / 2 - msgPadding, msgY - 22, textWidth + msgPadding * 2, 36, 8);
+                ctx.fill();
+
+                // Draw white border
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Draw text
                 ctx.fillStyle = '#FFFFFF';
-                ctx.font = '20px "Varela Round", Arial';
                 ctx.textAlign = 'center';
-                ctx.fillText(this.errorMessage, laptopX + startSpriteW / 2, laptopY + startSpriteH + 30);
+                ctx.fillText(this.errorMessage, msgX, msgY);
             }
 
             // Only make clickable for host when NOT counting down and enough players
@@ -809,9 +827,9 @@ export class GameLobbyScreen {
                     h: startSpriteH,
                     disabled: notEnoughPlayers
                 };
-                // Show error message if not enough players
-                if (notEnoughPlayers) {
-                    this.errorMessage = 'Need at least 4 players to start';
+                // Clear error message if enough players
+                if (!notEnoughPlayers) {
+                    this.errorMessage = '';
                 }
             } else {
                 this.startButton = null;
@@ -837,7 +855,9 @@ export class GameLobbyScreen {
             if (!this.startButton.disabled) {
                 return 'start';
             }
-            return null; // Not enough players
+            // Show error message when clicking disabled button
+            this.showError('Need at least 4 players to start');
+            return null;
         }
 
         // Check customize button
