@@ -1309,10 +1309,17 @@ export class Game {
 
         // Arrow keys and WASD for movement - all actions are button-only
         console.log('handleKeyDown reached, code:', e.code, 'key:', e.key, 'state:', this.state);
+
+        // DEBUG: Check if this is a WASD or Arrow key
+        const isMovementKey = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code);
+        if (isMovementKey) {
+            console.log('MOVEMENT KEY DETECTED:', e.code, '-> setting input');
+        }
+
         switch (e.code) {
             case 'KeyW':
             case 'ArrowUp':
-                console.log('UP pressed');
+                console.log('UP pressed - setting input.up = true');
                 this.input.up = true;
                 e.preventDefault();
                 break;
@@ -1616,6 +1623,14 @@ export class Game {
             // Only process input if not scanning
             this.localPlayer.update(dt, isScanning ? {} : this.input);
 
+            // Debug: log movement
+            const movedX = this.localPlayer.x !== oldX;
+            const movedY = this.localPlayer.y !== oldY;
+            if ((movedX || movedY) && (!this._lastMoveLog || Date.now() - this._lastMoveLog > 1000)) {
+                console.log('Movement detected - oldPos:', oldX.toFixed(1), oldY.toFixed(1), 'newPos:', this.localPlayer.x.toFixed(1), this.localPlayer.y.toFixed(1));
+                this._lastMoveLog = Date.now();
+            }
+
             // Play footstep sound every 3rd animation frame change while walking
             if (this.localPlayer.moving && this.localPlayer.animationFrame !== oldFrame) {
                 this.footstepCounter++;
@@ -1629,6 +1644,10 @@ export class Game {
 
             // Check collision and revert if needed
             if (this.map.checkCollision(this.localPlayer.x, this.localPlayer.y)) {
+                if (!this._lastCollisionLog || Date.now() - this._lastCollisionLog > 1000) {
+                    console.log('Collision detected, reverting position');
+                    this._lastCollisionLog = Date.now();
+                }
                 this.localPlayer.x = oldX;
                 this.localPlayer.y = oldY;
             }
