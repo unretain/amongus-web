@@ -603,26 +603,26 @@ export class MainMenu {
         }
 
         // Public Key section
-        ctx.font = 'bold 14px "Varela Round", Arial';
+        ctx.font = 'bold 18px "Varela Round", Arial';
         ctx.fillStyle = '#FFFFFF';
         ctx.fillText('PUBLIC KEY (Share this to receive funds)', screenW / 2, dialogY + 110);
 
-        ctx.font = '13px "Varela Round", Arial';
-        ctx.fillText(this.walletPublicKey || 'Generating...', screenW / 2, dialogY + 135);
+        ctx.font = '16px "Varela Round", Arial';
+        ctx.fillText(this.walletPublicKey || 'Generating...', screenW / 2, dialogY + 140);
 
         // Private Key section
-        ctx.font = 'bold 14px "Varela Round", Arial';
-        ctx.fillText('PRIVATE KEY (KEEP THIS SECRET!)', screenW / 2, dialogY + 195);
+        ctx.font = 'bold 18px "Varela Round", Arial';
+        ctx.fillText('PRIVATE KEY (KEEP THIS SECRET!)', screenW / 2, dialogY + 200);
 
-        ctx.font = '10px "Varela Round", Arial';
+        ctx.font = '14px "Varela Round", Arial';
         const privKeyDisplay = this.walletPrivateKey || 'Generating...';
-        ctx.fillText(privKeyDisplay, screenW / 2, dialogY + 220);
+        ctx.fillText(privKeyDisplay, screenW / 2, dialogY + 230);
 
         // Copy Private Key button
         const copyBtnW = 80;
         const copyBtnH = 35;
         const copyBtnX = (screenW - copyBtnW) / 2;
-        const copyBtnY = dialogY + 250;
+        const copyBtnY = dialogY + 260;
 
         this.privateKeyCopyButton = { x: copyBtnX, y: copyBtnY, w: copyBtnW, h: copyBtnH };
 
@@ -641,7 +641,7 @@ export class MainMenu {
         }
 
         // Warning text
-        ctx.font = '12px "Varela Round", Arial';
+        ctx.font = '14px "Varela Round", Arial';
         ctx.fillStyle = '#FFFFFF';
         ctx.fillText('Save your private key! You need it to access your funds.', screenW / 2, copyBtnY + 55);
 

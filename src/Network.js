@@ -32,7 +32,11 @@ export class NetworkManager {
         try {
             // Dynamic import for socket.io-client
             import('socket.io-client').then(({ io }) => {
-                this.socket = io('http://localhost:3001', {
+                // Use current origin in production, localhost in dev
+                const serverUrl = window.location.hostname === 'localhost'
+                    ? 'http://localhost:3001'
+                    : window.location.origin;
+                this.socket = io(serverUrl, {
                     transports: ['websocket', 'polling']
                 });
 
