@@ -617,6 +617,9 @@ export class MedScanTask extends Task {
     constructor(room, x, y) {
         super('Submit Scan', room, x, y);
 
+        // This task renders in the world (player visible), not full-screen overlay
+        this.isWorldTask = true;
+
         // Phase: 'panel' or 'scanning'
         this.phase = 'panel';
 

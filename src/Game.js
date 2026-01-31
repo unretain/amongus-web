@@ -2130,8 +2130,10 @@ export class Game {
     drawVisionOverlay(ctx) {
         if (!this.localPlayer) return;
 
-        // Skip vision during meetings or when viewing task/admin map
-        if (this.meetingActive || this.activeTask || this.adminMapOpen || this.sabotageMenuOpen) return;
+        // Skip vision during meetings or full-screen overlays
+        // But keep vision for world tasks like MedScan where player is still visible
+        const isFullScreenTask = this.activeTask && !this.activeTask.isWorldTask;
+        if (this.meetingActive || isFullScreenTask || this.adminMapOpen || this.sabotageMenuOpen) return;
 
         // Determine vision radius based on player state
         let visionRadius;
