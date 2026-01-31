@@ -117,9 +117,9 @@ export class Game {
         this.killRange = 100; // 1 meter = 100 pixels (approximately)
 
         // Vision settings (in game pixels, before zoom - multiplied by 2x zoom)
-        this.crewmateVision = 300; // Crewmate vision radius
-        this.impostorVision = 400; // Impostor vision radius
-        this.ghostVision = 600; // Ghost vision radius
+        this.crewmateVision = 180; // Crewmate vision radius
+        this.impostorVision = 240; // Impostor vision radius
+        this.ghostVision = 500; // Ghost vision radius
 
         // Vent cooldown state (imposter)
         this.ventCooldown = 0; // Cooldown timer in seconds
