@@ -2147,105 +2147,29 @@ export class Game {
             visionRadius = this.crewmateVision;
         }
 
-        // Get collision mask for raycasting
-        const collisionMask = this.map?.collisionMask;
-        if (!collisionMask) {
-            // Fallback to simple circular vision if no collision mask
-            this.drawSimpleVisionOverlay(ctx, visionRadius);
-            return;
-        }
+        // Apply zoom to vision radius
+        visionRadius *= this.cameraZoom;
 
-        const playerX = this.localPlayer.x;
-        const playerY = this.localPlayer.y;
-        const centerX = this.width / 2;
-        const centerY = this.height / 2;
-
-        // Cast rays to build visibility polygon
-        const numRays = 180; // Number of rays (more = smoother but slower)
-        const visibilityPoints = [];
-
-        for (let i = 0; i < numRays; i++) {
-            const angle = (i / numRays) * Math.PI * 2;
-            const rayEnd = this.castRay(playerX, playerY, angle, visionRadius, collisionMask);
-
-            // Convert world coords to screen coords
-            const screenX = (rayEnd.x - this.camera.x) * this.cameraZoom;
-            const screenY = (rayEnd.y - this.camera.y) * this.cameraZoom;
-            visibilityPoints.push({ x: screenX, y: screenY });
-        }
-
-        ctx.save();
-
-        // Fill entire screen with black
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(0, 0, this.width, this.height);
-
-        // Cut out the visible area using composite operation
-        ctx.globalCompositeOperation = 'destination-out';
-
-        // Draw visibility polygon with gradient
-        const gradient = ctx.createRadialGradient(
-            centerX, centerY, 0,
-            centerX, centerY, visionRadius * this.cameraZoom
-        );
-        gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
-        gradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.9)');
-        gradient.addColorStop(1, 'rgba(255, 255, 255, 0.3)');
-
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        if (visibilityPoints.length > 0) {
-            ctx.moveTo(visibilityPoints[0].x, visibilityPoints[0].y);
-            for (let i = 1; i < visibilityPoints.length; i++) {
-                ctx.lineTo(visibilityPoints[i].x, visibilityPoints[i].y);
-            }
-            ctx.closePath();
-        }
-        ctx.fill();
-
-        ctx.restore();
-    }
-
-    // Cast a ray from player position and return where it hits a wall or max distance
-    castRay(startX, startY, angle, maxDist, collisionMask) {
-        const stepSize = 4; // Check every 4 pixels for performance
-        const cos = Math.cos(angle);
-        const sin = Math.sin(angle);
-
-        for (let dist = 0; dist < maxDist; dist += stepSize) {
-            const x = startX + cos * dist;
-            const y = startY + sin * dist;
-
-            // Check if this point hits a wall
-            if (this.map.isWall(x, y)) {
-                return { x, y };
-            }
-        }
-
-        // No wall hit, return max distance point
-        return {
-            x: startX + cos * maxDist,
-            y: startY + sin * maxDist
-        };
-    }
-
-    // Simple circular vision fallback
-    drawSimpleVisionOverlay(ctx, visionRadius) {
         const centerX = this.width / 2;
         const centerY = this.height / 2;
         const maxDist = Math.sqrt(this.width ** 2 + this.height ** 2);
 
         ctx.save();
+
+        // Simple gradient vision
         const gradient = ctx.createRadialGradient(
-            centerX, centerY, visionRadius * this.cameraZoom * 0.8,
+            centerX, centerY, visionRadius * 0.8,
             centerX, centerY, maxDist
         );
         gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+        gradient.addColorStop(0.15, 'rgba(0, 0, 0, 0.2)');
         gradient.addColorStop(0.3, 'rgba(0, 0, 0, 0.5)');
-        gradient.addColorStop(0.6, 'rgba(0, 0, 0, 0.85)');
+        gradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.8)');
         gradient.addColorStop(1, 'rgba(0, 0, 0, 1)');
+
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, this.width, this.height);
+
         ctx.restore();
     }
 
