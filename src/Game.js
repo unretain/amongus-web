@@ -116,6 +116,11 @@ export class Game {
         this.killCooldownMax = 22.5; // 22.5 seconds cooldown
         this.killRange = 100; // 1 meter = 100 pixels (approximately)
 
+        // Vision settings (in game pixels, before zoom)
+        this.crewmateVision = 250; // Crewmate vision radius
+        this.impostorVision = 400; // Impostor vision radius (larger)
+        this.ghostVision = 800; // Ghosts can see much further
+
         // Vent cooldown state (imposter)
         this.ventCooldown = 0; // Cooldown timer in seconds
         this.ventCooldownMax = 10; // 10 seconds cooldown
@@ -2115,8 +2120,52 @@ export class Game {
 
         this.ctx.restore();
 
+        // Draw vision overlay (darkness outside vision radius)
+        this.drawVisionOverlay(this.ctx);
+
         // Draw UI (not affected by zoom)
         this.renderUI();
+    }
+
+    drawVisionOverlay(ctx) {
+        if (!this.localPlayer) return;
+
+        // Skip vision during meetings or when viewing task/admin map
+        if (this.meetingActive || this.activeTask || this.adminMapOpen || this.sabotageMenuOpen) return;
+
+        // Determine vision radius based on player state
+        let visionRadius;
+        if (this.localPlayer.isDead) {
+            visionRadius = this.ghostVision;
+        } else if (this.localPlayer.isImpostor) {
+            visionRadius = this.impostorVision;
+        } else {
+            visionRadius = this.crewmateVision;
+        }
+
+        // Apply zoom to vision radius
+        visionRadius *= this.cameraZoom;
+
+        // Player is at center of screen
+        const centerX = this.width / 2;
+        const centerY = this.height / 2;
+
+        // Create an offscreen canvas for the vision mask
+        ctx.save();
+
+        // Draw black overlay with a circular hole cut out
+        ctx.fillStyle = '#000000';
+        ctx.beginPath();
+
+        // Draw outer rectangle (full screen)
+        ctx.rect(0, 0, this.width, this.height);
+
+        // Draw inner circle (counter-clockwise to cut out)
+        ctx.arc(centerX, centerY, visionRadius, 0, Math.PI * 2, true);
+
+        ctx.fill('evenodd');
+
+        ctx.restore();
     }
 
     renderUI() {
