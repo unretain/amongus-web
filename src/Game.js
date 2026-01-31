@@ -3049,6 +3049,11 @@ export class Game {
             if (!shouldRender) continue;
 
             ctx.strokeStyle = strokeColor;
+
+            // Debug: count rendered shapes
+            if (!this._renderedShapeCounts) this._renderedShapeCounts = { box: 0, line: 0, roundedBox: 0 };
+            this._renderedShapeCounts[shape.type] = (this._renderedShapeCounts[shape.type] || 0) + 1;
+
             if (shape.type === 'box') {
                 // Render rectangle outline only (no fill)
                 const x = shape.x * scale - camera.x;
@@ -3087,6 +3092,13 @@ export class Game {
                 ctx.lineTo(x2, y2);
                 ctx.stroke();
             }
+        }
+
+        // Debug: log rendered shape counts once per second
+        if (!this._lastShapeCountLog || Date.now() - this._lastShapeCountLog > 5000) {
+            console.log('Rendered shape counts:', this._renderedShapeCounts);
+            this._renderedShapeCounts = { box: 0, line: 0, roundedBox: 0 };
+            this._lastShapeCountLog = Date.now();
         }
     }
 
