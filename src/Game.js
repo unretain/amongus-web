@@ -343,6 +343,16 @@ export class Game {
 
             // Start role reveal screen (Crewmate for now)
             this.startRoleReveal();
+
+            // Debug: log tasks at game start
+            console.log('=== GAME START - TASKS DEBUG ===');
+            console.log('Tasks count:', this.tasks?.length);
+            if (this.tasks) {
+                this.tasks.forEach((t, i) => {
+                    console.log(`Task ${i}: ${t.name} | ${t.room} (completed: ${t.completed})`);
+                });
+            }
+            console.log('================================');
         };
 
         // Countdown started - sync countdown to all players
@@ -2804,10 +2814,18 @@ export class Game {
             for (const task of this.tasks) {
                 if (!task.completed && task.enabled !== false) {
                     // Create key matching the format from task-box-editor
-                    playerTaskKeys.add(`${task.name}|${task.room}`);
+                    const key = `${task.name}|${task.room}`;
+                    playerTaskKeys.add(key);
                     playerTaskRooms.add(task.room);
                 }
             }
+        }
+
+        // Debug: log player task keys once per second
+        if (!this._lastTaskKeyLog || Date.now() - this._lastTaskKeyLog > 5000) {
+            console.log('Player task keys:', Array.from(playerTaskKeys));
+            console.log('Task box keys:', this.taskBoxes.filter(b => b.taskName).map(b => `${b.taskName}|${b.taskRoom}`));
+            this._lastTaskKeyLog = Date.now();
         }
 
         ctx.lineWidth = 2;
