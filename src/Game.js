@@ -2152,20 +2152,38 @@ export class Game {
         const centerX = this.width / 2;
         const centerY = this.height / 2;
 
+        // Calculate distance to farthest corner to ensure full coverage
+        const maxDist = Math.sqrt(Math.max(centerX, this.width - centerX) ** 2 + Math.max(centerY, this.height - centerY) ** 2);
+
         ctx.save();
 
         // Create radial gradient from center (transparent) to edge (black)
         const gradient = ctx.createRadialGradient(
-            centerX, centerY, visionRadius * 0.7,  // Inner circle (fully visible)
-            centerX, centerY, visionRadius * 1.3   // Outer circle (fully dark)
+            centerX, centerY, visionRadius * 0.8,  // Inner circle (fully visible)
+            centerX, centerY, maxDist + 50         // Outer circle extends to corners
         );
         gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');      // Transparent at center
-        gradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.3)');  // Start fading
-        gradient.addColorStop(0.8, 'rgba(0, 0, 0, 0.7)');  // Getting darker
+        gradient.addColorStop(0.15, 'rgba(0, 0, 0, 0.1)'); // Very slight fade
+        gradient.addColorStop(0.3, 'rgba(0, 0, 0, 0.4)');  // Start fading more
+        gradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.75)'); // Getting darker
+        gradient.addColorStop(0.7, 'rgba(0, 0, 0, 0.95)'); // Almost black
         gradient.addColorStop(1, 'rgba(0, 0, 0, 1)');      // Fully black at edge
 
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, this.width, this.height);
+
+        // Add grainy noise by drawing random semi-transparent dots (lighter on performance)
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        for (let i = 0; i < 500; i++) {
+            const x = Math.random() * this.width;
+            const y = Math.random() * this.height;
+            const dist = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
+            // Only add noise outside the clear vision area
+            if (dist > visionRadius * 0.7) {
+                const size = Math.random() * 3 + 1;
+                ctx.fillRect(x, y, size, size);
+            }
+        }
 
         ctx.restore();
     }
