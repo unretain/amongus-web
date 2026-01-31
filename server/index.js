@@ -156,6 +156,10 @@ class GameRoomManager {
 
         // If room is empty, delete it
         if (room.players.size === 0) {
+            // Clean up room occupancy interval if exists
+            if (room.occupancyInterval) {
+                clearInterval(room.occupancyInterval);
+            }
             this.rooms.delete(code);
             console.log(`Room ${code} deleted (empty)`);
             return { roomDeleted: true, code };
@@ -230,7 +234,8 @@ class GameRoom {
             isDead: false,
             isImpostor: false,
             isHost: socket.id === this.hostId,
-            currentRoom: null // Track which room player is in for admin table
+            currentRoom: null, // Track which room player is in for admin table
+            lastKillTime: 0 // Server-side kill cooldown tracking
         };
         this.players.set(socket.id, player);
         return player;
@@ -331,11 +336,24 @@ class GameRoom {
         if (this.deadPlayers.has(targetId)) return { error: 'Target already dead' };
         if (this.deadPlayers.has(killerId)) return { error: 'You are dead' };
 
+        const killer = this.players.get(killerId);
+        if (!killer) return { error: 'Killer not found' };
+
+        // Server-side cooldown check (22.5 seconds)
+        const now = Date.now();
+        const cooldownMs = 22500; // 22.5 seconds in milliseconds
+        if (killer.lastKillTime && (now - killer.lastKillTime) < cooldownMs) {
+            const remaining = ((cooldownMs - (now - killer.lastKillTime)) / 1000).toFixed(1);
+            console.log(`Kill rejected - cooldown: ${remaining}s remaining`);
+            return { error: 'Kill on cooldown' };
+        }
+
         const target = this.players.get(targetId);
         if (!target) return { error: 'Target not found' };
 
         target.isDead = true;
         this.deadPlayers.add(targetId);
+        killer.lastKillTime = now; // Set cooldown
 
         // Check win condition
         const winResult = this.checkWinCondition();
@@ -642,6 +660,14 @@ io.on('connection', (socket) => {
             console.log(`Game started in room ${room.code}`);
             // Broadcast initial room occupancy for admin table
             setTimeout(() => broadcastRoomOccupancy(room), 100);
+            // Set up periodic room occupancy broadcasts every 500ms for admin table live updates
+            room.occupancyInterval = setInterval(() => {
+                if (room.state === 'playing') {
+                    broadcastRoomOccupancy(room);
+                } else {
+                    clearInterval(room.occupancyInterval);
+                }
+            }, 500);
         } else {
             socket.emit('error', { message: result.error });
         }

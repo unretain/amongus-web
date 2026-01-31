@@ -762,9 +762,10 @@ export class GameLobbyScreen {
             const laptopX = (screenW - startSpriteW) / 2;
             const laptopY = (screenH - startSpriteH) / 2 + 190;
 
-            // Grey out if not host OR during countdown
+            // Grey out if not host OR during countdown OR not enough players
             const isCountingDown = this.startCountdown > 0;
-            if (!this.isHost || isCountingDown) {
+            const notEnoughPlayers = this.players.size < 4;
+            if (!this.isHost || isCountingDown || notEnoughPlayers) {
                 ctx.globalAlpha = 0.4;
             }
 
@@ -798,9 +799,20 @@ export class GameLobbyScreen {
                 ctx.fillText(this.errorMessage, laptopX + startSpriteW / 2, laptopY + startSpriteH + 30);
             }
 
-            // Only make clickable for host when NOT counting down
+            // Only make clickable for host when NOT counting down and enough players
             if (this.isHost && !isCountingDown) {
-                this.startButton = { x: laptopX, y: laptopY, w: startSpriteW, h: startSpriteH };
+                const notEnoughPlayers = this.players.size < 4;
+                this.startButton = {
+                    x: laptopX,
+                    y: laptopY,
+                    w: startSpriteW,
+                    h: startSpriteH,
+                    disabled: notEnoughPlayers
+                };
+                // Show error message if not enough players
+                if (notEnoughPlayers) {
+                    this.errorMessage = 'Need at least 4 players to start';
+                }
             } else {
                 this.startButton = null;
             }

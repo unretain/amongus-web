@@ -1019,8 +1019,16 @@ export class Game {
             // Check skip vote button
             if (this.skipVoteButton && this.isInRect(x, y, this.skipVoteButton)) {
                 console.log('Skipped vote!');
-                if (this.localPlayer) this.localPlayer.hasVoted = true;
-                this.playVoteSound();
+                if (this.localPlayer && !this.localPlayer.hasVoted) {
+                    this.localPlayer.hasVoted = true;
+                    this.playVoteSound();
+                    // Send skip vote to server
+                    if (this.network && this.network.connected) {
+                        this.network.vote(null); // null = skip
+                    }
+                    // Also update local vote map for offline/display
+                    this.voteMap.set(this.network?.playerId || this.localPlayer.id, 'skip');
+                }
                 return;
             }
 
@@ -1028,12 +1036,21 @@ export class Game {
             if (this.voteButtons) {
                 for (const btn of this.voteButtons) {
                     if (btn && this.isInRect(x, y, btn)) {
-                        console.log(`Voted for player: ${btn.playerId}`);
-                        if (this.localPlayer) this.localPlayer.hasVoted = true;
-                        this.playVoteSound();
-                        // Mark voted player
-                        const votedPlayer = this.players.get(btn.playerId);
-                        if (votedPlayer) votedPlayer.votesReceived = (votedPlayer.votesReceived || 0) + 1;
+                        // Don't allow voting for yourself or already voted
+                        if (this.localPlayer && !this.localPlayer.hasVoted && btn.playerId !== this.localPlayer.id) {
+                            console.log(`Voted for player: ${btn.playerId}`);
+                            this.localPlayer.hasVoted = true;
+                            this.playVoteSound();
+                            // Send vote to server
+                            if (this.network && this.network.connected) {
+                                this.network.vote(btn.playerId);
+                            }
+                            // Also update local vote map for offline/display
+                            this.voteMap.set(this.network?.playerId || this.localPlayer.id, btn.playerId);
+                            // Mark voted player locally
+                            const votedPlayer = this.players.get(btn.playerId);
+                            if (votedPlayer) votedPlayer.votesReceived = (votedPlayer.votesReceived || 0) + 1;
+                        }
                         return;
                     }
                 }
@@ -1172,36 +1189,44 @@ export class Game {
             }
         }
 
-        // Only arrow keys for movement - all actions are button-only
+        // Arrow keys and WASD for movement - all actions are button-only
         switch (e.code) {
             case 'ArrowUp':
+            case 'KeyW':
                 this.input.up = true;
                 break;
             case 'ArrowDown':
+            case 'KeyS':
                 this.input.down = true;
                 break;
             case 'ArrowLeft':
+            case 'KeyA':
                 this.input.left = true;
                 break;
             case 'ArrowRight':
+            case 'KeyD':
                 this.input.right = true;
                 break;
         }
     }
 
     handleKeyUp(e) {
-        // Only arrow keys for movement - all actions are button-only
+        // Arrow keys and WASD for movement - all actions are button-only
         switch (e.code) {
             case 'ArrowUp':
+            case 'KeyW':
                 this.input.up = false;
                 break;
             case 'ArrowDown':
+            case 'KeyS':
                 this.input.down = false;
                 break;
             case 'ArrowLeft':
+            case 'KeyA':
                 this.input.left = false;
                 break;
             case 'ArrowRight':
+            case 'KeyD':
                 this.input.right = false;
                 break;
         }
@@ -4240,10 +4265,23 @@ export class Game {
         const type = data.sabotageType;
         if (type === 'reactor' || type === '02') {
             this.startCriticalSabotage(type);
+        } else {
+            // Handle non-critical sabotages
+            switch (type) {
+                case 'electrical':
+                    console.log('Lights sabotaged (from network)!');
+                    // TODO: Reduce vision for crewmates
+                    break;
+                case 'comms':
+                    console.log('Communications disabled (from network)!');
+                    break;
+                case 'doors':
+                    console.log('Doors locked (from network)!');
+                    break;
+            }
+            // Play alarm sound for non-critical sabotages too
+            this.playSabotageAlarm();
         }
-
-        // Play alarm sound
-        this.playSabotageAlarm();
     }
 
     // Vent events (only received by other impostors)
@@ -4585,7 +4623,13 @@ export class Game {
 
             if (dist < reportRange) {
                 console.log(`Reporting body of ${player.name}!`);
-                this.startEmergencyMeeting('body', player.id);
+                // Send body report to server
+                if (this.network && this.network.connected) {
+                    this.network.reportBody(player.id);
+                } else {
+                    // Offline mode
+                    this.triggerMeeting('body', this.localPlayer?.id, player.id);
+                }
                 return;
             }
         }
@@ -4631,6 +4675,14 @@ export class Game {
             console.log('Sabotage alarm sound loaded');
         } catch (e) {
             console.warn('Failed to load sabotage alarm sound', e);
+        }
+    }
+
+    // Play sabotage alarm sound
+    playSabotageAlarm() {
+        if (this.sabotageAlarmSound) {
+            this.sabotageAlarmSound.currentTime = 0;
+            this.sabotageAlarmSound.play().catch(e => console.log('Sabotage alarm play failed:', e));
         }
     }
 
