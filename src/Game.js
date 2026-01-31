@@ -688,7 +688,8 @@ export class Game {
     }
 
     processMapShapes() {
-        // Task definitions with their coordinates (in full map scale 8564x4793)
+        // Process shapes - use embedded taskName/taskRoom if present (from Task Outliner),
+        // otherwise fall back to proximity matching
         const taskLocations = [
             { name: 'Align Engine Output', room: 'Upper Engine', x: 1847, y: 653 },
             { name: 'Align Engine Output', room: 'Lower Engine', x: 1709, y: 2885 },
@@ -702,7 +703,7 @@ export class Game {
             { name: 'Upload Data', room: 'Admin', x: 5403, y: 2343 },
             { name: 'Prime Shields', room: 'Shields', x: 6060, y: 3759 },
             { name: 'Stabilize Steering', room: 'Navigation', x: 6881, y: 3045 },
-            { name: 'Chart Course', room: 'Navigation', x: 8360, y: 2100 },
+            { name: 'Stabilize Steering', room: 'Navigation', x: 8360, y: 2100 },
             { name: 'Accept Diverted Power', room: 'O2', x: 6460, y: 1673 },
             { name: 'Clean O2 Filter', room: 'O2', x: 6460, y: 1673 },
             { name: 'Clear Asteroids', room: 'Weapons', x: 7565, y: 1908 },
@@ -723,10 +724,20 @@ export class Game {
             { name: 'Calibrate Distributor', room: 'Electrical', x: 3660, y: 2180 },
         ];
 
-        // Associate each shape with the nearest task
-        const scale = 0.25;
         for (const shape of this.mapShapes) {
-            // Get shape center coordinates
+            // Check if white/always visible first
+            if (shape.strokeColor === '#ffffff' || shape.taskName === 'Always Visible') {
+                shape.alwaysVisible = true;
+                continue;
+            }
+
+            // If shape already has taskName and taskRoom from export, use those directly
+            if (shape.taskName && shape.taskRoom && shape.taskName !== 'Unknown') {
+                console.log(`Shape has task: ${shape.taskName} (${shape.taskRoom})`);
+                continue;
+            }
+
+            // Fall back to proximity matching for old format
             let shapeX, shapeY;
             if (shape.type === 'box') {
                 shapeX = shape.x + shape.width / 2;
@@ -736,7 +747,6 @@ export class Game {
                 shapeY = (shape.y1 + shape.y2) / 2;
             }
 
-            // Find nearest task (within 300 pixels in full map scale)
             let nearestTask = null;
             let nearestDist = 300;
             for (const task of taskLocations) {
@@ -749,15 +759,9 @@ export class Game {
                 }
             }
 
-            // Assign task to shape
             if (nearestTask) {
                 shape.taskName = nearestTask.name;
                 shape.taskRoom = nearestTask.room;
-            }
-
-            // Check if white/always visible (white stroke color)
-            if (shape.strokeColor === '#ffffff') {
-                shape.alwaysVisible = true;
             }
         }
 
@@ -2939,16 +2943,27 @@ export class Game {
         const scale = 0.25; // Map scale factor
         ctx.lineWidth = 3;
 
+        // Check if player is impostor and in/near vent for vent range shapes
+        const isImpostor = this.localPlayer.isImpostor;
+        const inVentRange = this.localPlayer.inVent || this.isNearVent();
+
         for (const shape of this.mapShapes) {
+            // Skip imposter-only shapes if not impostor
+            if (shape.imposterOnly && !isImpostor) continue;
+
+            // Skip vent-range-only shapes if not in vent range
+            if (shape.ventRangeOnly && !inVentRange) continue;
+
             // Determine if this shape should be rendered
             let shouldRender = false;
-            let fillColor = 'rgba(255, 204, 0, 0.25)';
             let strokeColor = shape.strokeColor || '#ffcc00';
 
             // White shapes always show
             if (shape.alwaysVisible) {
                 shouldRender = true;
-                fillColor = 'rgba(255, 255, 255, 0.15)';
+            } else if (shape.imposterOnly) {
+                // Imposter-only shapes show for imposters (already filtered above)
+                shouldRender = true;
             } else if (shape.taskName && shape.taskRoom) {
                 // Check if player has this task
                 const shapeKey = `${shape.taskName}|${shape.taskRoom}`;
@@ -2960,16 +2975,34 @@ export class Game {
             if (!shouldRender) continue;
 
             ctx.strokeStyle = strokeColor;
-            ctx.fillStyle = fillColor;
 
             if (shape.type === 'box') {
-                // Render rectangle (scaled from full map coordinates)
+                // Render rectangle outline only (no fill)
                 const x = shape.x * scale - camera.x;
                 const y = shape.y * scale - camera.y;
                 const w = shape.width * scale;
                 const h = shape.height * scale;
-                ctx.fillRect(x, y, w, h);
                 ctx.strokeRect(x, y, w, h);
+            } else if (shape.type === 'roundedBox') {
+                // Render rounded rectangle outline only (no fill)
+                const x = shape.x * scale - camera.x;
+                const y = shape.y * scale - camera.y;
+                const w = shape.width * scale;
+                const h = shape.height * scale;
+                const radius = Math.min((shape.borderRadius || 15) * scale, w / 4, h / 4);
+
+                ctx.beginPath();
+                ctx.moveTo(x + radius, y);
+                ctx.lineTo(x + w - radius, y);
+                ctx.arcTo(x + w, y, x + w, y + radius, radius);
+                ctx.lineTo(x + w, y + h - radius);
+                ctx.arcTo(x + w, y + h, x + w - radius, y + h, radius);
+                ctx.lineTo(x + radius, y + h);
+                ctx.arcTo(x, y + h, x, y + h - radius, radius);
+                ctx.lineTo(x, y + radius);
+                ctx.arcTo(x, y, x + radius, y, radius);
+                ctx.closePath();
+                ctx.stroke();
             } else if (shape.type === 'line') {
                 // Render line (scaled from full map coordinates)
                 const x1 = shape.x1 * scale - camera.x;
