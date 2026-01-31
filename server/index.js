@@ -602,6 +602,12 @@ io.on('connection', (socket) => {
             return;
         }
 
+        // Check minimum player count before starting countdown
+        if (room.players.size < 4) {
+            io.to(room.code).emit('countdown_error', { message: 'At least 4 players must join to start' });
+            return;
+        }
+
         // Broadcast countdown start to all players in room
         io.to(room.code).emit('countdown_started');
         console.log(`Countdown started in room ${room.code}`);

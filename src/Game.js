@@ -351,6 +351,14 @@ export class Game {
                 this.gameLobbyScreen.beginStartCountdown();
             }
         };
+
+        // Countdown error - not enough players
+        this.network.onCountdownError = (message) => {
+            console.log('Countdown error:', message);
+            if (this.gameLobbyScreen) {
+                this.gameLobbyScreen.showError(message);
+            }
+        };
     }
 
     async loadAssets() {

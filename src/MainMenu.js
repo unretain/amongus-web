@@ -44,6 +44,8 @@ export class MainMenu {
         // SOL token address (CA) - replace with actual token address
         this.solTokenAddress = 'sol1238538927498279482324';
         this.copyFeedbackTimer = 0; // For "Copied!" feedback
+        this.privateKeyCopyTimer = 0; // For private key copy feedback
+        this.privateKeyCopyButton = null;
 
         // Floating crew member sprites from main-screen-crew.png
         this.crewSprites = [
@@ -307,6 +309,7 @@ export class MainMenu {
 
         // Draw logo
         const logo = assetLoader?.getTexture('logo');
+        let logoBottomY = 180; // Default if no logo
         if (logo) {
             const logoScale = 1.0;
             const logoW = logo.width * logoScale;
@@ -314,6 +317,7 @@ export class MainMenu {
             const logoX = (screenW - logoW) / 2;
             const logoY = 80;
             ctx.drawImage(logo, logoX, logoY, logoW, logoH);
+            logoBottomY = logoY + logoH;
         } else {
             // Fallback text logo
             ctx.fillStyle = '#FFFFFF';
@@ -321,6 +325,12 @@ export class MainMenu {
             ctx.textAlign = 'center';
             ctx.fillText('AMONG US', screenW / 2, 180);
         }
+
+        // Draw "On Chain" text below logo
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '56px "In Your Face Joffrey", Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('On Chain', screenW / 2, logoBottomY + 60);
 
         // Draw player icon and ID below logo, to the left
         const menuTexture = assetLoader?.getTexture('main_menu_ui');
@@ -348,8 +358,8 @@ export class MainMenu {
         ctx.fillText(this.solTokenAddress, solTextX, solTextY);
 
         // Draw copy button BELOW the address with backer_2 style
-        const copyBtnW = 80;
-        const copyBtnH = 36;
+        const copyBtnW = 100;
+        const copyBtnH = 40;
         const copyBtnX = iconX;
         const copyBtnY = iconY + iconH + 10;
 
@@ -359,7 +369,7 @@ export class MainMenu {
         // Load buttons sheet for backer
         if (!this._buttonsSheet) {
             this._buttonsSheet = new Image();
-            this._buttonsSheet.src = '/assets/buttons-sheet.png';
+            this._buttonsSheet.src = '/assets/gui/Buttons-sharedassets0.assets-73.png';
         }
         const buttonsSheet = this._buttonsSheet?.complete ? this._buttonsSheet : null;
 
@@ -367,14 +377,14 @@ export class MainMenu {
         if (buttonsSheet) {
             const backer = { x: 303, y: 120, w: 56, h: 56 };
             this.draw9Slice(ctx, buttonsSheet, backer.x, backer.y, backer.w, backer.h,
-                copyBtnX, copyBtnY, copyBtnW, copyBtnH, 15);
+                copyBtnX, copyBtnY, copyBtnW, copyBtnH, 20);
         }
 
         // Button text (always white)
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = '16px "Varela Round", Arial';
+        ctx.font = '18px "Varela Round", Arial';
         ctx.textAlign = 'center';
-        ctx.fillText(this.copyFeedbackTimer > 0 ? 'Copied!' : 'Copy', copyBtnX + copyBtnW / 2, copyBtnY + copyBtnH / 2 + 6);
+        ctx.fillText(this.copyFeedbackTimer > 0 ? 'Copied!' : 'Copy', copyBtnX + copyBtnW / 2, copyBtnY + 26);
 
         // Decrease feedback timer
         if (this.copyFeedbackTimer > 0) {
@@ -408,7 +418,7 @@ export class MainMenu {
             // Load buttons sheet for wallet
             if (!this._buttonsSheet) {
                 this._buttonsSheet = new Image();
-                this._buttonsSheet.src = '/assets/buttons-sheet.png';
+                this._buttonsSheet.src = '/assets/gui/Buttons-sharedassets0.assets-73.png';
             }
             const buttonsSheet = this._buttonsSheet?.complete ? this._buttonsSheet : null;
 
@@ -427,7 +437,7 @@ export class MainMenu {
             if (buttonsSheet) {
                 const backer = { x: 303, y: 120, w: 56, h: 56 };
                 this.draw9Slice(ctx, buttonsSheet, backer.x, backer.y, backer.w, backer.h,
-                    walletX, rowY, walletW, walletH, 14);
+                    walletX, rowY, walletW, walletH, 20);
 
                 // Draw "WALLET" text with In Your Face Joffrey font (with letter spacing)
                 ctx.fillStyle = '#FFFFFF';
@@ -494,7 +504,7 @@ export class MainMenu {
         // Load it ourselves since it's from OldButtons.png (buttons-sheet.png)
         if (!this._buttonsSheet) {
             this._buttonsSheet = new Image();
-            this._buttonsSheet.src = '/assets/buttons-sheet.png';
+            this._buttonsSheet.src = '/assets/gui/Buttons-sharedassets0.assets-73.png';
         }
 
         const buttonsSheet = this._buttonsSheet?.complete ? this._buttonsSheet : null;
@@ -504,7 +514,7 @@ export class MainMenu {
         // Draw main dialog backer_2 - NO FALLBACK FILL
         if (buttonsSheet) {
             this.draw9Slice(ctx, buttonsSheet, backer.x, backer.y, backer.w, backer.h,
-                dialogX, dialogY, dialogW, dialogH, 14);
+                dialogX, dialogY, dialogW, dialogH, 20);
         }
 
         // Title - same style as Wallet dialog
@@ -536,20 +546,20 @@ export class MainMenu {
         ctx.font = '14px "Varela Round", Arial';
         ctx.fillText('Split between all crewmates', screenW / 2, y + 25);
 
-        // Close button using backer_2
-        const closeW = 120;
-        const closeH = 45;
+        // Close button using backer_2 - smaller, fits text
+        const closeW = 80;
+        const closeH = 32;
         const closeX = (screenW - closeW) / 2;
-        const closeY = dialogY + dialogH - 65;
+        const closeY = dialogY + dialogH - 55;
 
         if (buttonsSheet) {
             this.draw9Slice(ctx, buttonsSheet, backer.x, backer.y, backer.w, backer.h,
-                closeX, closeY, closeW, closeH, 10);
+                closeX, closeY, closeW, closeH, 20);
         }
 
-        // Close button text - same style as Wallet
-        ctx.font = '20px "In Your Face Joffrey", Arial';
-        ctx.fillText('CLOSE', screenW / 2, closeY + 30);
+        // Close button text - Varela Round
+        ctx.font = '16px "Varela Round", Arial';
+        ctx.fillText('Close', screenW / 2, closeY + 21);
 
         // Store close button hitbox
         this.howToPlayCloseButton = { x: closeX, y: closeY, w: closeW, h: closeH };
@@ -560,16 +570,16 @@ export class MainMenu {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
         ctx.fillRect(0, 0, screenW, screenH);
 
-        // Dialog box dimensions
-        const dialogW = 650;
-        const dialogH = 350;
+        // Dialog box dimensions - larger to fit content
+        const dialogW = 700;
+        const dialogH = 420;
         const dialogX = (screenW - dialogW) / 2;
         const dialogY = (screenH - dialogH) / 2;
 
         // Get buttons sheet texture for backer_2
         if (!this._buttonsSheet) {
             this._buttonsSheet = new Image();
-            this._buttonsSheet.src = '/assets/buttons-sheet.png';
+            this._buttonsSheet.src = '/assets/gui/Buttons-sharedassets0.assets-73.png';
         }
 
         const buttonsSheet = this._buttonsSheet?.complete ? this._buttonsSheet : null;
@@ -578,14 +588,14 @@ export class MainMenu {
         // Draw main dialog backer_2
         if (buttonsSheet) {
             this.draw9Slice(ctx, buttonsSheet, backer.x, backer.y, backer.w, backer.h,
-                dialogX, dialogY, dialogW, dialogH, 14);
+                dialogX, dialogY, dialogW, dialogH, 20);
         }
 
-        // Title - white text with Joffrey font
+        // Title - In Your Face Joffrey
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = '36px "In Your Face Joffrey", Arial';
+        ctx.font = '32px "In Your Face Joffrey", Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('YOUR WALLET', screenW / 2, dialogY + 50);
+        ctx.fillText('YOUR WALLET', screenW / 2, dialogY + 55);
 
         // Generate keys if not already generated
         if (!this.walletPublicKey || !this.walletPrivateKey) {
@@ -593,45 +603,63 @@ export class MainMenu {
         }
 
         // Public Key section
-        ctx.font = 'bold 16px "Varela Round", Arial';
+        ctx.font = 'bold 14px "Varela Round", Arial';
         ctx.fillStyle = '#FFFFFF';
-        ctx.fillText('PUBLIC KEY (Share this to receive funds)', screenW / 2, dialogY + 100);
+        ctx.fillText('PUBLIC KEY (Share this to receive funds)', screenW / 2, dialogY + 110);
 
-        ctx.font = '14px "Varela Round", Arial';
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(this.walletPublicKey || 'Generating...', screenW / 2, dialogY + 130);
+        ctx.font = '13px "Varela Round", Arial';
+        ctx.fillText(this.walletPublicKey || 'Generating...', screenW / 2, dialogY + 135);
 
         // Private Key section
-        ctx.font = 'bold 16px "Varela Round", Arial';
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillText('PRIVATE KEY (KEEP THIS SECRET!)', screenW / 2, dialogY + 180);
+        ctx.font = 'bold 14px "Varela Round", Arial';
+        ctx.fillText('PRIVATE KEY (KEEP THIS SECRET!)', screenW / 2, dialogY + 195);
 
-        ctx.font = '11px "Varela Round", Arial';
-        ctx.fillStyle = '#FFFFFF';
-        // Show private key in smaller font, truncated if needed
+        ctx.font = '10px "Varela Round", Arial';
         const privKeyDisplay = this.walletPrivateKey || 'Generating...';
-        ctx.fillText(privKeyDisplay, screenW / 2, dialogY + 210);
+        ctx.fillText(privKeyDisplay, screenW / 2, dialogY + 220);
+
+        // Copy Private Key button
+        const copyBtnW = 80;
+        const copyBtnH = 35;
+        const copyBtnX = (screenW - copyBtnW) / 2;
+        const copyBtnY = dialogY + 250;
+
+        this.privateKeyCopyButton = { x: copyBtnX, y: copyBtnY, w: copyBtnW, h: copyBtnH };
+
+        if (buttonsSheet) {
+            this.draw9Slice(ctx, buttonsSheet, backer.x, backer.y, backer.w, backer.h,
+                copyBtnX, copyBtnY, copyBtnW, copyBtnH, 20);
+        }
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '16px "Varela Round", Arial';
+        ctx.fillText(this.privateKeyCopyTimer > 0 ? 'Copied!' : 'Copy', screenW / 2, copyBtnY + 23);
+
+        // Decrease feedback timer
+        if (this.privateKeyCopyTimer > 0) {
+            this.privateKeyCopyTimer -= 16;
+        }
 
         // Warning text
         ctx.font = '12px "Varela Round", Arial';
         ctx.fillStyle = '#FFFFFF';
-        ctx.fillText('Save your private key! You need it to access your funds.', screenW / 2, dialogY + 250);
+        ctx.fillText('Save your private key! You need it to access your funds.', screenW / 2, copyBtnY + 55);
 
-        // Close button using backer_2
-        const closeW = 120;
-        const closeH = 45;
+        // Close button
+        const closeW = 100;
+        const closeH = 40;
         const closeX = (screenW - closeW) / 2;
-        const closeY = dialogY + dialogH - 65;
+        const closeY = dialogY + dialogH - 55;
 
         if (buttonsSheet) {
             this.draw9Slice(ctx, buttonsSheet, backer.x, backer.y, backer.w, backer.h,
-                closeX, closeY, closeW, closeH, 10);
+                closeX, closeY, closeW, closeH, 20);
         }
 
-        // Close button text
-        ctx.font = 'bold 20px "VCR OSD Mono", monospace';
+        // Close button text - Varela Round
+        ctx.font = '18px "Varela Round", Arial';
         ctx.fillStyle = '#FFFFFF';
-        ctx.fillText('CLOSE', screenW / 2, closeY + 30);
+        ctx.fillText('Close', screenW / 2, closeY + 26);
 
         // Store close button hitbox
         this.walletCloseButton = { x: closeX, y: closeY, w: closeW, h: closeH };
@@ -702,28 +730,30 @@ export class MainMenu {
         ctx.textAlign = 'center'; // Reset
     }
 
-    // 9-slice drawing for scalable UI panels
-    draw9Slice(ctx, texture, sx, sy, sw, sh, dx, dy, dw, dh, corner) {
-        const c = corner; // corner size
-        const smw = sw - c * 2; // source middle width
-        const smh = sh - c * 2; // source middle height
-        const dmw = dw - c * 2; // dest middle width
-        const dmh = dh - c * 2; // dest middle height
+    // 9-slice drawing for scalable UI panels (smart scaling like OnlineScreen)
+    draw9Slice(ctx, texture, sx, sy, sw, sh, dx, dy, dw, dh, cornerSize) {
+        if (!texture) return;
 
-        // Top row
-        ctx.drawImage(texture, sx, sy, c, c, dx, dy, c, c); // TL
-        ctx.drawImage(texture, sx + c, sy, smw, c, dx + c, dy, dmw, c); // T
-        ctx.drawImage(texture, sx + sw - c, sy, c, c, dx + dw - c, dy, c, c); // TR
+        const cs = cornerSize;
+        const scale = Math.min(dw / sw, dh / sh, 1);
+        const dc = Math.floor(cs * scale);
+        const maxCorner = Math.min(dw / 2, dh / 2);
+        const dcClamped = Math.min(dc, maxCorner);
 
-        // Middle row
-        ctx.drawImage(texture, sx, sy + c, c, smh, dx, dy + c, c, dmh); // L
-        ctx.drawImage(texture, sx + c, sy + c, smw, smh, dx + c, dy + c, dmw, dmh); // M
-        ctx.drawImage(texture, sx + sw - c, sy + c, c, smh, dx + dw - c, dy + c, c, dmh); // R
+        // Corners
+        ctx.drawImage(texture, sx, sy, cs, cs, dx, dy, dcClamped, dcClamped);
+        ctx.drawImage(texture, sx + sw - cs, sy, cs, cs, dx + dw - dcClamped, dy, dcClamped, dcClamped);
+        ctx.drawImage(texture, sx, sy + sh - cs, cs, cs, dx, dy + dh - dcClamped, dcClamped, dcClamped);
+        ctx.drawImage(texture, sx + sw - cs, sy + sh - cs, cs, cs, dx + dw - dcClamped, dy + dh - dcClamped, dcClamped, dcClamped);
 
-        // Bottom row
-        ctx.drawImage(texture, sx, sy + sh - c, c, c, dx, dy + dh - c, c, c); // BL
-        ctx.drawImage(texture, sx + c, sy + sh - c, smw, c, dx + c, dy + dh - c, dmw, c); // B
-        ctx.drawImage(texture, sx + sw - c, sy + sh - c, c, c, dx + dw - c, dy + dh - c, c, c); // BR
+        // Edges
+        ctx.drawImage(texture, sx + cs, sy, sw - cs * 2, cs, dx + dcClamped, dy, dw - dcClamped * 2, dcClamped);
+        ctx.drawImage(texture, sx + cs, sy + sh - cs, sw - cs * 2, cs, dx + dcClamped, dy + dh - dcClamped, dw - dcClamped * 2, dcClamped);
+        ctx.drawImage(texture, sx, sy + cs, cs, sh - cs * 2, dx, dy + dcClamped, dcClamped, dh - dcClamped * 2);
+        ctx.drawImage(texture, sx + sw - cs, sy + cs, cs, sh - cs * 2, dx + dw - dcClamped, dy + dcClamped, dcClamped, dh - dcClamped * 2);
+
+        // Center
+        ctx.drawImage(texture, sx + cs, sy + cs, sw - cs * 2, sh - cs * 2, dx + dcClamped, dy + dcClamped, dw - dcClamped * 2, dh - dcClamped * 2);
     }
 
     handleClick(x, y) {
@@ -740,12 +770,29 @@ export class MainMenu {
             return null;
         }
 
-        // If Wallet dialog is open, only handle close button
+        // If Wallet dialog is open, handle close button and copy button
         if (this.showWallet) {
             if (this.walletCloseButton && this.isInBounds(x, y, this.walletCloseButton)) {
                 console.log('Wallet closed');
                 this.showWallet = false;
                 return 'close_wallet';
+            }
+            // Check private key copy button
+            if (this.privateKeyCopyButton && this.isInBounds(x, y, this.privateKeyCopyButton)) {
+                this.privateKeyCopyTimer = 1500;
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(this.walletPrivateKey).catch(err => {
+                        console.error('Clipboard failed:', err);
+                    });
+                } else {
+                    const textArea = document.createElement('textarea');
+                    textArea.value = this.walletPrivateKey;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                }
+                return 'copy_private_key';
             }
             // Block other clicks while dialog is open
             return null;

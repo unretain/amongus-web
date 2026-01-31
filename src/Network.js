@@ -164,6 +164,11 @@ export class NetworkManager {
             if (this.onCountdownStarted) this.onCountdownStarted();
         });
 
+        this.socket.on('countdown_error', (data) => {
+            console.log('Countdown error:', data.message);
+            if (this.onCountdownError) this.onCountdownError(data.message);
+        });
+
         this.socket.on('player_killed', (data) => {
             this.game.onPlayerKilled(data);
         });

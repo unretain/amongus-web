@@ -82,6 +82,10 @@ export class GameLobbyScreen {
         this.countdownSound = null;
         this.loadCountdownSound();
 
+        // Error message state
+        this.errorMessage = '';
+        this.errorMessageTimer = 0;
+
         // Spawn points (10 positions in the lobby)
         this.spawnPoints = [
             { id: 1, x: 581, y: 373 },
@@ -149,6 +153,12 @@ export class GameLobbyScreen {
             }
             console.log('Start countdown cancelled - new player joined');
         }
+    }
+
+    // Show error message (visible to all players)
+    showError(message) {
+        this.errorMessage = message;
+        this.errorMessageTimer = 3; // Show for 3 seconds
     }
 
     async loadLobbyFrames() {
@@ -444,6 +454,15 @@ export class GameLobbyScreen {
                 this.startCountdown = 0;
                 // Countdown complete - return signal to start game
                 this.countdownComplete = true;
+            }
+        }
+
+        // Update error message timer
+        if (this.errorMessageTimer > 0) {
+            this.errorMessageTimer -= dt;
+            if (this.errorMessageTimer <= 0) {
+                this.errorMessageTimer = 0;
+                this.errorMessage = '';
             }
         }
 
@@ -769,6 +788,14 @@ export class GameLobbyScreen {
                 ctx.textAlign = 'center';
                 ctx.strokeText(countdownNum.toString(), laptopX + startSpriteW / 2, laptopY + startSpriteH / 2 + 70);
                 ctx.fillText(countdownNum.toString(), laptopX + startSpriteW / 2, laptopY + startSpriteH / 2 + 70);
+            }
+
+            // Draw error message below start button (visible to all players)
+            if (this.errorMessage && this.errorMessageTimer > 0) {
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = '20px "Varela Round", Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(this.errorMessage, laptopX + startSpriteW / 2, laptopY + startSpriteH + 30);
             }
 
             // Only make clickable for host when NOT counting down
