@@ -877,16 +877,41 @@ export class Game {
             }
         }
 
-        // Build single tasks dynamically
-        const allSingleTasks = [];
-
-        // Fix Wiring tasks
+        // Fix Wiring - multi-step task with 3 random locations
+        const wiringLocations = [];
         for (const [key, loc] of Object.entries(taskLocations)) {
             if (key.startsWith('Fix Wiring|')) {
-                const room = loc.room;
-                allSingleTasks.push(() => new WiresTask(room, loc.x, loc.y));
+                wiringLocations.push({ room: loc.room, x: loc.x, y: loc.y });
             }
         }
+        if (wiringLocations.length >= 3) {
+            allMultiTasks.push(() => {
+                // Shuffle and pick 3 random wiring locations
+                const shuffled = [...wiringLocations].sort(() => Math.random() - 0.5);
+                const selected = shuffled.slice(0, 3);
+
+                // Create 3 linked WiresTask instances
+                const wire1 = new WiresTask(selected[0].room, selected[0].x, selected[0].y);
+                const wire2 = new WiresTask(selected[1].room, selected[1].x, selected[1].y);
+                const wire3 = new WiresTask(selected[2].room, selected[2].x, selected[2].y);
+
+                // Link them: wire2 and wire3 start disabled
+                wire2.enabled = false;
+                wire3.enabled = false;
+                wire1.nextWire = wire2;
+                wire2.nextWire = wire3;
+
+                // Name them to show progress (1/3, 2/3, 3/3)
+                wire1.name = 'Fix Wiring (1/3)';
+                wire2.name = 'Fix Wiring (2/3)';
+                wire3.name = 'Fix Wiring (3/3)';
+
+                return [wire1, wire2, wire3];
+            });
+        }
+
+        // Build single tasks dynamically
+        const allSingleTasks = [];
 
         // Clear Asteroids tasks
         for (const [key, loc] of Object.entries(taskLocations)) {
@@ -2986,13 +3011,16 @@ export class Game {
             if (task.completed) continue;
             if (task.enabled === false) continue;
 
+            // Strip step suffix like "(1/3)" for shape matching
+            const baseName = task.name.replace(/\s*\(\d+\/\d+\)$/, '');
+
             // Try specific key first (task name + room)
-            const key = `${task.name}_${task.room}`;
+            const key = `${baseName}_${task.room}`;
             let shapes = taskShapes[key];
 
             // Fallback to just task name (for tasks like Divert Power that have one location)
             if (!shapes) {
-                shapes = taskShapes[task.name];
+                shapes = taskShapes[baseName];
             }
 
             if (shapes) {
@@ -3037,7 +3065,9 @@ export class Game {
         if (this.tasks) {
             for (const task of this.tasks) {
                 if (!task.completed && task.enabled !== false) {
-                    playerTaskKeys.add(`${task.name}|${task.room}`);
+                    // Strip step suffix like "(1/3)" for shape matching
+                    const baseName = task.name.replace(/\s*\(\d+\/\d+\)$/, '');
+                    playerTaskKeys.add(`${baseName}|${task.room}`);
                 }
             }
         }

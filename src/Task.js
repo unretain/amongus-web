@@ -36,6 +36,10 @@ export class WiresTask extends Task {
     constructor(room, x, y) {
         super('Fix Wiring', room, x, y);
 
+        // Multi-step task properties
+        this.enabled = true;   // Whether this step is enabled
+        this.nextWire = null;  // Next wiring task in sequence
+
         // Task panel dimensions - using actual sprite size
         this.panelWidth = 508;
         this.panelHeight = 500;
@@ -377,6 +381,11 @@ export class WiresTask extends Task {
                         if (this.connections.size === 4) {
                             this.completed = true;
                             console.log('Wires task completed!');
+                            // Enable the next wiring task if this is a multi-step task
+                            if (this.nextWire) {
+                                this.nextWire.enabled = true;
+                                console.log('Next wiring panel enabled: ' + this.nextWire.room);
+                            }
                         }
                     }
                     break;
