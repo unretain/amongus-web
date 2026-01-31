@@ -2956,6 +2956,16 @@ export class Game {
             console.log('=== TASK MATCHING DEBUG ===');
             console.log('Player tasks:', Array.from(playerTaskKeys));
             console.log('Map shapes with tasks:', this.mapShapes.filter(s => s.taskName).map(s => `${s.taskName}|${s.taskRoom}`));
+
+            // Debug Clear Asteroids specifically
+            const asteroidShapes = this.mapShapes.filter(s => s.taskName === 'Clear Asteroids');
+            console.log('Clear Asteroids shapes count:', asteroidShapes.length);
+            if (asteroidShapes.length > 0) {
+                console.log('First Clear Asteroids shape:', JSON.stringify(asteroidShapes[0]));
+            }
+            const hasAsteroidTask = playerTaskKeys.has('Clear Asteroids|Weapons');
+            console.log('Player has Clear Asteroids|Weapons:', hasAsteroidTask);
+
             this._loggedTaskKeys = true;
         }
 
@@ -2993,9 +3003,17 @@ export class Game {
 
             if (!shouldRender) continue;
 
-            ctx.strokeStyle = strokeColor;
+            // Debug: log when rendering Clear Asteroids shapes
+            if (shape.taskName === 'Clear Asteroids' && !this._loggedAsteroidRender) {
+                console.log('Rendering Clear Asteroids shape at:', shape.type === 'line' ?
+                    `(${shape.x1}, ${shape.y1}) -> (${shape.x2}, ${shape.y2})` :
+                    `(${shape.x}, ${shape.y})`);
+                console.log('Camera position:', camera.x, camera.y);
+                console.log('Scale:', scale);
+                this._loggedAsteroidRender = true;
+            }
 
-            if (shape.type === 'box') {
+            ctx.strokeStyle = strokeColor;
                 // Render rectangle outline only (no fill)
                 const x = shape.x * scale - camera.x;
                 const y = shape.y * scale - camera.y;
