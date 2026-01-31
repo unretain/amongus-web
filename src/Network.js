@@ -101,6 +101,11 @@ export class NetworkManager {
             if (this.onRoomLeft) this.onRoomLeft();
         });
 
+        this.socket.on('returned_to_lobby', (data) => {
+            console.log('Returned to lobby:', data.roomInfo);
+            if (this.onReturnedToLobby) this.onReturnedToLobby(data);
+        });
+
         this.socket.on('player_joined', (data) => {
             console.log('=== PLAYER_JOINED EVENT ===');
             console.log('Player joined:', data.player.id, data.player.name);
@@ -280,6 +285,11 @@ export class NetworkManager {
         if (!this.connected || !this.socket) return;
         this.socket.emit('leave_room');
         this.currentRoomCode = null;
+    }
+
+    returnToLobby() {
+        if (!this.connected || !this.socket) return;
+        this.socket.emit('return_to_lobby');
     }
 
     disconnect() {

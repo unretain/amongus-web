@@ -95,12 +95,6 @@ export class Player {
     static IDLE_FRAME = 0;
 
     update(dt, inputState) {
-        // Debug: log update call periodically
-        if (!this._lastUpdateLog || Date.now() - this._lastUpdateLog > 2000) {
-            console.log('Player.update called - isLocal:', this.isLocal, 'isSpawning:', this.isSpawning, 'inVent:', this.inVent, 'inputState:', JSON.stringify(inputState));
-            this._lastUpdateLog = Date.now();
-        }
-
         // Update spawn animation if active
         if (this.isSpawning) {
             this.updateSpawnAnimation(dt);

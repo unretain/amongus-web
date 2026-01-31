@@ -421,6 +421,27 @@ class GameRoom {
             players: this.getPlayersData()
         };
     }
+
+    // Reset room back to lobby state (for play again)
+    returnToLobby() {
+        this.state = 'lobby';
+        this.impostors.clear();
+        this.deadPlayers.clear();
+
+        // Reset all player states
+        for (const [id, player] of this.players) {
+            player.isDead = false;
+            player.isImpostor = false;
+            player.x = 1500;
+            player.y = 350;
+            player.velocityX = 0;
+            player.velocityY = 0;
+            player.moving = false;
+            player.lastKillTime = 0;
+        }
+
+        return { success: true };
+    }
 }
 
 // ============================================
@@ -569,6 +590,19 @@ io.on('connection', (socket) => {
                     roomInfo: result.room?.getRoomInfo()
                 });
             }
+        }
+    });
+
+    // Return to lobby (play again) - resets room state without leaving
+    socket.on('return_to_lobby', () => {
+        const room = roomManager.getPlayerRoom(socket.id);
+        if (room) {
+            room.returnToLobby();
+            // Notify all players in the room
+            io.to(room.code).emit('returned_to_lobby', {
+                roomInfo: room.getRoomInfo()
+            });
+            console.log(`Room ${room.code} returned to lobby`);
         }
     });
 

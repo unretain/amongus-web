@@ -274,10 +274,11 @@ export class Game {
         this.network.onRoomLeft = () => {
             console.log('Left room');
             this.state = 'online_select';
-            this.gameLobbyScreen.hide();
-            this.onlineScreen.show();
-            // Stop any playing game ambience
-            this.stopAmbience();
+        };
+
+        // Returned to lobby (play again)
+        this.network.onReturnedToLobby = (data) => {
+            this.onReturnedToLobby(data);
         };
 
         // Player joined room - update game lobby
@@ -1423,19 +1424,10 @@ export class Game {
             }
         }
 
-        // Arrow keys and WASD for movement - all actions are button-only
-        console.log('handleKeyDown reached, code:', e.code, 'key:', e.key, 'state:', this.state);
-
-        // DEBUG: Check if this is a WASD or Arrow key
-        const isMovementKey = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code);
-        if (isMovementKey) {
-            console.log('MOVEMENT KEY DETECTED:', e.code, '-> setting input');
-        }
-
+        // Arrow keys and WASD for movement
         switch (e.code) {
             case 'KeyW':
             case 'ArrowUp':
-                console.log('UP pressed - setting input.up = true');
                 this.input.up = true;
                 e.preventDefault();
                 break;
@@ -1738,14 +1730,6 @@ export class Game {
 
             // Only process input if not scanning
             this.localPlayer.update(dt, isScanning ? {} : this.input);
-
-            // Debug: log movement
-            const movedX = this.localPlayer.x !== oldX;
-            const movedY = this.localPlayer.y !== oldY;
-            if ((movedX || movedY) && (!this._lastMoveLog || Date.now() - this._lastMoveLog > 1000)) {
-                console.log('Movement detected - oldPos:', oldX.toFixed(1), oldY.toFixed(1), 'newPos:', this.localPlayer.x.toFixed(1), this.localPlayer.y.toFixed(1));
-                this._lastMoveLog = Date.now();
-            }
 
             // Play footstep sound every 3rd animation frame change while walking
             if (this.localPlayer.moving && this.localPlayer.animationFrame !== oldFrame) {
@@ -2281,25 +2265,6 @@ export class Game {
                 return p.isImpostor; // Show impostors
             }
         });
-
-        // Title text
-        ctx.font = 'bold 64px "VCR OSD Mono", Arial, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'top';
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 6;
-        ctx.fillStyle = localPlayerWon ? '#00FF00' : '#FF0000';
-
-        const title = localPlayerWon ? 'VICTORY' : 'DEFEAT';
-        const subtitle = crewmatesWon ? 'Crewmates Win!' : 'Impostors Win!';
-
-        ctx.strokeText(title, screenW / 2, 50);
-        ctx.fillText(title, screenW / 2, 50);
-
-        ctx.font = 'bold 36px "VCR OSD Mono", Arial, sans-serif';
-        ctx.fillStyle = '#FFFFFF';
-        ctx.strokeText(subtitle, screenW / 2, 130);
-        ctx.fillText(subtitle, screenW / 2, 130);
 
         // Draw players with their sprites and names
         const playerTexture = assetLoader.getTexture('player_sheet');
@@ -5115,17 +5080,22 @@ export class Game {
             this.victoryVideo.currentTime = 0;
         }
 
-        // Store room code before reset
-        const roomCode = this.network?.currentRoomCode;
-        const playerName = this.localPlayer?.name || 'Player';
-        const playerColor = this.localPlayer?.color || 0;
+        // Tell server to return room to lobby state
+        if (this.network) {
+            this.network.returnToLobby();
+        }
 
-        // Reset game state but keep network connection
+        console.log('Requesting return to lobby');
+    }
+
+    // Called when server confirms return to lobby
+    onReturnedToLobby(data) {
+        console.log('Returned to lobby:', data);
+
+        // Reset game state
         this.gameOverWinner = null;
         this.gameOverData = null;
         this.victoryButtons = null;
-        this.localPlayer = null;
-        this.players.clear();
         this.deadBodies = [];
         this.meetingActive = false;
         this.activeTask = null;
@@ -5139,19 +5109,22 @@ export class Game {
         this.tasks = [];
         this.initTasks();
 
+        // Reset local player state
+        if (this.localPlayer) {
+            this.localPlayer.isDead = false;
+            this.localPlayer.isImpostor = false;
+        }
+
+        // Reset all players
+        for (const player of this.players.values()) {
+            player.isDead = false;
+            player.isImpostor = false;
+        }
+
         // Return to game lobby state
         this.state = 'game_lobby';
 
-        // Re-join the same room
-        if (this.network && roomCode) {
-            this.network.leaveRoom();
-            // Rejoin after a brief delay
-            setTimeout(() => {
-                this.network.joinRoom(roomCode, playerName, playerColor);
-            }, 100);
-        }
-
-        console.log('Playing again in room:', roomCode);
+        console.log('Game state reset, now in lobby');
     }
 
     // Quit to lobby browser (find game page)
