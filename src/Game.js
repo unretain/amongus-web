@@ -162,33 +162,6 @@ export class Game {
         // Task location boxes from map editor (scaled from 8564x4793 full map to game scale 0.25)
         // Yellow boxes show only for players who have that task, white boxes always show
         const s = 0.25;
-        this.taskBoxes = [
-            // Yellow task boxes - only show if player has that specific task
-            { x: 1847.54 * s, y: 653.10 * s, w: 74.30 * s, h: 52.63 * s, color: '#ffcc00', taskName: 'Align Engine Output', taskRoom: 'Upper Engine' },
-            { x: 1348.83 * s, y: 1787.60 * s, w: 71.28 * s, h: 53.46 * s, color: '#ffcc00', taskName: 'Unlock Manifolds', taskRoom: 'Reactor' },
-            { x: 1348.83 * s, y: 1787.60 * s, w: 71.28 * s, h: 53.46 * s, color: '#ffcc00', taskName: 'Start Reactor', taskRoom: 'Reactor' },
-            { x: 1709.64 * s, y: 2885.95 * s, w: 71.05 * s, h: 53.29 * s, color: '#ffcc00', taskName: 'Align Engine Output', taskRoom: 'Lower Engine' },
-            { x: 3328.45 * s, y: 2535.62 * s, w: 71.94 * s, h: 49.56 * s, color: '#ffcc00', taskName: 'Divert Power', taskRoom: 'Electrical' },
-            { x: 3561.85 * s, y: 2605.96 * s, w: 67.14 * s, h: 41.56 * s, color: '#ffcc00', taskName: 'Fix Wiring', taskRoom: 'Electrical' },
-            { x: 3198.96 * s, y: 2534.02 * s, w: 65.54 * s, h: 59.15 * s, color: '#ffcc00', taskName: 'Download Data', taskRoom: 'Electrical' },
-            { x: 5201.62 * s, y: 2379.43 * s, w: 67.91 * s, h: 42.79 * s, color: '#ffcc00', taskName: 'Swipe Card', taskRoom: 'Admin' },
-            { x: 5201.62 * s, y: 2379.43 * s, w: 67.91 * s, h: 42.79 * s, color: '#ffcc00', taskName: 'Fix Wiring', taskRoom: 'Admin' },
-            { x: 5403.50 * s, y: 2343.15 * s, w: 66.05 * s, h: 61.40 * s, color: '#ffcc00', taskName: 'Upload Data', taskRoom: 'Admin' },
-            { x: 6060.87 * s, y: 3759.42 * s, w: 73.37 * s, h: 51.36 * s, color: '#ffef3d', taskName: 'Prime Shields', taskRoom: 'Shields' },
-            { x: 6881.58 * s, y: 3045.87 * s, w: 74.99 * s, h: 54.54 * s, color: '#ffef3d', taskName: 'Stabilize Steering', taskRoom: 'Navigation' },
-            { x: 6460.40 * s, y: 1673.22 * s, w: 73.30 * s, h: 53.64 * s, color: '#ffef3d', taskName: 'Accept Diverted Power', taskRoom: 'O2' },
-            { x: 7565.93 * s, y: 1908.04 * s, w: 68.51 * s, h: 45.67 * s, color: '#ffef3d', taskName: 'Clear Asteroids', taskRoom: 'Weapons' },
-            { x: 7565.93 * s, y: 1908.04 * s, w: 68.51 * s, h: 45.67 * s, color: '#ffef3d', taskName: 'Accept Diverted Power', taskRoom: 'Weapons' },
-            { x: 7835.93 * s, y: 1668.93 * s, w: 69.85 * s, h: 48.36 * s, color: '#ffef3d', taskName: 'Accept Diverted Power', taskRoom: 'Navigation' },
-            { x: 6512.07 * s, y: 509.78 * s, w: 69.5 * s, h: 58.5 * s, color: '#ffef3d', taskName: 'Fix Wiring', taskRoom: 'Cafeteria' },
-            { x: 6512.07 * s, y: 509.78 * s, w: 69.5 * s, h: 58.5 * s, color: '#ffef3d', taskName: 'Download Data', taskRoom: 'Cafeteria' },
-            { x: 6164.63 * s, y: 1732.32 * s, w: 57.72 * s, h: 55.04 * s, color: '#ffef3d', taskName: 'Submit Scan', taskRoom: 'MedBay' },
-            // White boxes - always visible for everyone
-            { x: 6122.30 * s, y: 2373.65 * s, w: 51.06 * s, h: 56.87 * s, color: '#ffffff', alwaysVisible: true },
-            { x: 1126.97 * s, y: 1447.45 * s, w: 57.47 * s, h: 84.41 * s, color: '#ffffff', alwaysVisible: true },
-            { x: 1123.62 * s, y: 2859.21 * s, w: 56.56 * s, h: 13.57 * s, color: '#ffffff', alwaysVisible: true },
-        ];
-
         // Task complete overlay state
         this.taskCompleteOverlay = false;
         this.taskCompleteTimer = 0;
@@ -843,8 +816,6 @@ export class Game {
             }
         }
 
-        console.log('Task locations from shapes:', Object.keys(taskLocations));
-
         // Find Divert Power source location (in Electrical)
         const divertSource = taskLocations['Divert Power|Electrical'] || { x: Math.round(3326.37 * s), y: Math.round(2533.29 * s) };
 
@@ -978,8 +949,6 @@ export class Game {
             }
         }
 
-        console.log(`Built ${allMultiTasks.length} multi-step tasks and ${allSingleTasks.length} single tasks from shapes`);
-
         // Shuffle and select tasks
         const shuffledMulti = [...allMultiTasks].sort(() => Math.random() - 0.5);
         const shuffledSingle = [...allSingleTasks].sort(() => Math.random() - 0.5);
@@ -1011,16 +980,9 @@ export class Game {
         o2Keypad2.partnerTask = o2Keypad1;
 
         this.sabotages = [reactorPanel1, reactorPanel2, o2Keypad1, o2Keypad2];
-
-        console.log(`Assigned ${4} tasks (${numMulti} multi-step, ${numSingle} single)`);
     }
 
     setupInput() {
-        // Global debug listener (first to fire)
-        window.addEventListener('keydown', (e) => {
-            console.log('GLOBAL KEYDOWN:', e.code, e.key, 'target:', e.target.tagName);
-        }, true); // capture phase
-
         // Keyboard input
         window.addEventListener('keydown', (e) => this.handleKeyDown(e));
         window.addEventListener('keyup', (e) => this.handleKeyUp(e));
@@ -1710,11 +1672,6 @@ export class Game {
 
         // Update local player
         if (this.localPlayer) {
-            // Debug: log input state occasionally
-            if (!this._lastInputLog || Date.now() - this._lastInputLog > 2000) {
-                console.log('Input state:', JSON.stringify(this.input), 'localPlayer exists:', !!this.localPlayer);
-                this._lastInputLog = Date.now();
-            }
             // Lock movement during MedScan scanning phase
             const isScanning = this.activeTask && this.activeTask.phase === 'scanning';
             if (isScanning) {
@@ -1744,10 +1701,6 @@ export class Game {
 
             // Check collision and revert if needed
             if (this.map.checkCollision(this.localPlayer.x, this.localPlayer.y)) {
-                if (!this._lastCollisionLog || Date.now() - this._lastCollisionLog > 1000) {
-                    console.log('Collision detected, reverting position');
-                    this._lastCollisionLog = Date.now();
-                }
                 this.localPlayer.x = oldX;
                 this.localPlayer.y = oldY;
             }
@@ -3038,23 +2991,6 @@ export class Game {
         }
 
         // Debug: log once
-        if (!this._loggedTaskKeys) {
-            console.log('=== TASK MATCHING DEBUG ===');
-            console.log('Player tasks:', Array.from(playerTaskKeys));
-            console.log('Map shapes with tasks:', this.mapShapes.filter(s => s.taskName).map(s => `${s.taskName}|${s.taskRoom}`));
-
-            // Debug Clear Asteroids specifically
-            const asteroidShapes = this.mapShapes.filter(s => s.taskName === 'Clear Asteroids');
-            console.log('Clear Asteroids shapes count:', asteroidShapes.length);
-            if (asteroidShapes.length > 0) {
-                console.log('First Clear Asteroids shape:', JSON.stringify(asteroidShapes[0]));
-            }
-            const hasAsteroidTask = playerTaskKeys.has('Clear Asteroids|Weapons');
-            console.log('Player has Clear Asteroids|Weapons:', hasAsteroidTask);
-
-            this._loggedTaskKeys = true;
-        }
-
         const scale = 0.25; // Map scale factor
         ctx.lineWidth = 3;
 
@@ -3089,17 +3025,8 @@ export class Game {
 
             if (!shouldRender) continue;
 
-            // Debug: log when rendering Clear Asteroids shapes
-            if (shape.taskName === 'Clear Asteroids' && !this._loggedAsteroidRender) {
-                console.log('Rendering Clear Asteroids shape at:', shape.type === 'line' ?
-                    `(${shape.x1}, ${shape.y1}) -> (${shape.x2}, ${shape.y2})` :
-                    `(${shape.x}, ${shape.y})`);
-                console.log('Camera position:', camera.x, camera.y);
-                console.log('Scale:', scale);
-                this._loggedAsteroidRender = true;
-            }
-
             ctx.strokeStyle = strokeColor;
+            if (shape.type === 'box') {
                 // Render rectangle outline only (no fill)
                 const x = shape.x * scale - camera.x;
                 const y = shape.y * scale - camera.y;
