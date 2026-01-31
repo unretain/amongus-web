@@ -1204,6 +1204,7 @@ export class Game {
         }
 
         // Arrow keys and WASD for movement - all actions are button-only
+        console.log('Key pressed:', e.code, 'State:', this.state);
         switch (e.code) {
             case 'ArrowUp':
             case 'KeyW':
@@ -1485,6 +1486,11 @@ export class Game {
 
         // Update local player
         if (this.localPlayer) {
+            // Debug: log input state occasionally
+            if (!this._lastInputLog || Date.now() - this._lastInputLog > 2000) {
+                console.log('Input state:', JSON.stringify(this.input), 'localPlayer exists:', !!this.localPlayer);
+                this._lastInputLog = Date.now();
+            }
             // Lock movement during MedScan scanning phase
             const isScanning = this.activeTask && this.activeTask.phase === 'scanning';
             if (isScanning) {
