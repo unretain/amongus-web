@@ -252,8 +252,9 @@ class GameRoom {
     }
 
     startGame() {
-        if (this.players.size < 4) {
-            return { success: false, error: 'Need at least 4 players to start' };
+        // TODO: Change back to 4 for production
+        if (this.players.size < 1) {
+            return { success: false, error: 'Need at least 1 player to start' };
         }
 
         this.state = 'starting';
