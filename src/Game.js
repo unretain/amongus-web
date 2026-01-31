@@ -1299,9 +1299,11 @@ export class Game {
         }
 
         // Arrow keys and WASD for movement - all actions are button-only
+        console.log('handleKeyDown reached, code:', e.code, 'key:', e.key, 'state:', this.state);
         switch (e.code) {
             case 'KeyW':
             case 'ArrowUp':
+                console.log('UP pressed');
                 this.input.up = true;
                 e.preventDefault();
                 break;
