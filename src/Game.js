@@ -1299,23 +1299,26 @@ export class Game {
         }
 
         // Arrow keys and WASD for movement - all actions are button-only
-        console.log('Key pressed:', e.code, 'State:', this.state);
         switch (e.code) {
-            case 'ArrowUp':
             case 'KeyW':
+            case 'ArrowUp':
                 this.input.up = true;
+                e.preventDefault();
                 break;
-            case 'ArrowDown':
             case 'KeyS':
+            case 'ArrowDown':
                 this.input.down = true;
+                e.preventDefault();
                 break;
-            case 'ArrowLeft':
             case 'KeyA':
+            case 'ArrowLeft':
                 this.input.left = true;
+                e.preventDefault();
                 break;
-            case 'ArrowRight':
             case 'KeyD':
+            case 'ArrowRight':
                 this.input.right = true;
+                e.preventDefault();
                 break;
         }
     }
@@ -1323,20 +1326,20 @@ export class Game {
     handleKeyUp(e) {
         // Arrow keys and WASD for movement - all actions are button-only
         switch (e.code) {
-            case 'ArrowUp':
             case 'KeyW':
+            case 'ArrowUp':
                 this.input.up = false;
                 break;
-            case 'ArrowDown':
             case 'KeyS':
+            case 'ArrowDown':
                 this.input.down = false;
                 break;
-            case 'ArrowLeft':
             case 'KeyA':
+            case 'ArrowLeft':
                 this.input.left = false;
                 break;
-            case 'ArrowRight':
             case 'KeyD':
+            case 'ArrowRight':
                 this.input.right = false;
                 break;
         }
