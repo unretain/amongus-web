@@ -895,6 +895,11 @@ export class Game {
     }
 
     setupInput() {
+        // Global debug listener (first to fire)
+        window.addEventListener('keydown', (e) => {
+            console.log('GLOBAL KEYDOWN:', e.code, e.key, 'target:', e.target.tagName);
+        }, true); // capture phase
+
         // Keyboard input
         window.addEventListener('keydown', (e) => this.handleKeyDown(e));
         window.addEventListener('keyup', (e) => this.handleKeyUp(e));
