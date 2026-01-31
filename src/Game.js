@@ -2815,17 +2815,30 @@ export class Game {
 
         ctx.lineWidth = 3;
 
+        // Debug: log tasks once
+        if (!this._loggedTasks) {
+            console.log('=== ALL TASKS ===');
+            this.tasks?.forEach((t, i) => console.log(`Task ${i}: ${t.name} at (${t.x}, ${t.y}) completed=${t.completed} enabled=${t.enabled}`));
+            this._loggedTasks = true;
+        }
+
         // Draw yellow boxes directly at each incomplete task's location
         if (this.tasks) {
             for (const task of this.tasks) {
-                if (!task.completed && task.enabled !== false) {
+                if (!task.completed) {
                     // Draw a yellow box centered on the task location
                     const boxSize = 60;
                     const boxX = task.x - boxSize / 2;
                     const boxY = task.y - boxSize / 2;
 
-                    ctx.strokeStyle = '#ffcc00';
-                    ctx.fillStyle = 'rgba(255, 204, 0, 0.25)';
+                    // Bright yellow for enabled tasks, dimmer for disabled (waiting) tasks
+                    if (task.enabled !== false) {
+                        ctx.strokeStyle = '#ffcc00';
+                        ctx.fillStyle = 'rgba(255, 204, 0, 0.25)';
+                    } else {
+                        ctx.strokeStyle = '#888844';
+                        ctx.fillStyle = 'rgba(136, 136, 68, 0.15)';
+                    }
                     ctx.fillRect(boxX - camera.x, boxY - camera.y, boxSize, boxSize);
                     ctx.strokeRect(boxX - camera.x, boxY - camera.y, boxSize, boxSize);
                 }
