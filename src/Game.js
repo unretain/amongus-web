@@ -49,7 +49,7 @@ export class Game {
 
         // Camera follows local player
         this.camera = { x: 0, y: 0 };
-        this.cameraZoom = 2.0; // Zoom in 2x for closer view
+        this.cameraZoom = 3.0; // Zoom in 3x for closer view
 
         // Role reveal state (shows "Crewmate" or "Impostor" at game start)
         this.roleRevealActive = false;
@@ -598,23 +598,15 @@ export class Game {
             console.warn('Failed to load crewmate reveal sound', e);
         }
 
-        // Load crewmate reveal background
-        try {
-            this.crewmateRevealBg = new Image();
-            this.crewmateRevealBg.src = '/assets/crewmate-reveal-bg.png';
-            console.log('Crewmate reveal background loaded');
-        } catch (e) {
-            console.warn('Failed to load crewmate reveal background', e);
-        }
+        // Preload crewmate reveal background
+        this.crewmateRevealBg = new Image();
+        this.crewmateRevealBg.onload = () => console.log('Crewmate reveal background loaded');
+        this.crewmateRevealBg.src = '/assets/crewmate-reveal-bg.png';
 
-        // Load impostor reveal background
-        try {
-            this.impostorRevealBg = new Image();
-            this.impostorRevealBg.src = '/assets/impostor-reveal-bg.jpg';
-            console.log('Impostor reveal background loaded');
-        } catch (e) {
-            console.warn('Failed to load impostor reveal background', e);
-        }
+        // Preload impostor reveal background
+        this.impostorRevealBg = new Image();
+        this.impostorRevealBg.onload = () => console.log('Impostor reveal background loaded');
+        this.impostorRevealBg.src = '/assets/impostor-reveal-bg.jpg';
 
         // Load victory/defeat screen assets
         try {
@@ -1971,11 +1963,9 @@ export class Game {
         const revealBg = isImpostor ? this.impostorRevealBg : this.crewmateRevealBg;
 
         // Draw the role reveal background (covers full screen)
-        // Check both complete AND naturalWidth to ensure image loaded successfully
-        if (revealBg && revealBg.complete && revealBg.naturalWidth > 0) {
-            // Scale to fit screen while maintaining aspect ratio
-            const imgW = revealBg.width;
-            const imgH = revealBg.height;
+        if (revealBg) {
+            const imgW = revealBg.width || this.width;
+            const imgH = revealBg.height || this.height;
             const screenW = this.width;
             const screenH = this.height;
 
@@ -1987,32 +1977,20 @@ export class Game {
             const drawY = (screenH - drawH) / 2;
 
             ctx.drawImage(revealBg, drawX, drawY, drawW, drawH);
-        } else {
-            // Fallback: dark background with role text
-            ctx.fillStyle = isImpostor ? '#1a0000' : '#000010';
-            ctx.fillRect(0, 0, this.width, this.height);
-
-            // Draw role text as fallback
-            ctx.fillStyle = isImpostor ? '#ff0000' : '#00ffff';
-            ctx.font = 'bold 72px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(isImpostor ? 'IMPOSTOR' : 'CREWMATE', this.width / 2, this.height / 3);
         }
 
-        // Draw the local player sprite in the middle-bottom area
+        // Draw the local player sprite in the center
         if (this.localPlayer) {
             const playerX = this.width / 2;
-            const playerY = this.height * 0.7; // 70% down the screen
+            const playerY = this.height * 0.65;
 
-            // Draw player at larger scale
             ctx.save();
             ctx.translate(playerX, playerY);
 
-            // Get player idle sprite and draw it
             const idleSprite = assetLoader.getSprite('player_idle');
             if (idleSprite && idleSprite.frames.length > 0) {
                 const frame = idleSprite.frames[0];
-                const spriteScale = 2; // Reveal screen scale
+                const spriteScale = 3;
                 const playerColor = Player.COLORS[this.localPlayer.color % Player.COLORS.length];
                 this.localPlayer.drawRecoloredFrame(ctx, idleSprite.texture, frame, spriteScale, playerColor);
             }
@@ -2144,49 +2122,73 @@ export class Game {
         // Ghosts have infinite vision
         if (this.localPlayer.isDead && this.ghostVision === null) return;
 
-        // Get room polygons from minimap data (fullmap coordinates)
-        const roomPolygons = this.getRoomPolygons();
-        if (!roomPolygons || roomPolygons.length === 0) {
-            // Fallback to simple gradient if no room data
-            this.drawSimpleGradientVision(ctx);
-            return;
+        // Determine vision radius
+        let visionRadius = this.localPlayer.isImpostor ? this.impostorVision : this.crewmateVision;
+
+        const playerX = this.localPlayer.x;
+        const playerY = this.localPlayer.y;
+        const centerX = this.width / 2;
+        const centerY = this.height / 2;
+
+        // Cast rays to build visibility polygon using collision mask
+        const numRays = 120;
+        const visibilityPoints = [];
+
+        for (let i = 0; i < numRays; i++) {
+            const angle = (i / numRays) * Math.PI * 2;
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+
+            let hitDist = visionRadius;
+
+            // Raycast using collision mask to find walls
+            if (this.map && this.map.collisionData) {
+                for (let dist = 15; dist < visionRadius; dist += 5) {
+                    const checkX = playerX + cos * dist;
+                    const checkY = playerY + sin * dist;
+
+                    if (this.map.isPixelBlocked(checkX, checkY)) {
+                        hitDist = dist;
+                        break;
+                    }
+                }
+            }
+
+            // Convert to screen coords
+            const screenX = centerX + cos * hitDist * this.cameraZoom;
+            const screenY = centerY + sin * hitDist * this.cameraZoom;
+            visibilityPoints.push({ x: screenX, y: screenY });
         }
 
-        // Find which room the player is in
-        const playerRoom = this.getPlayerRoom(this.localPlayer.x, this.localPlayer.y, roomPolygons);
+        // Store visible area for task outline filtering
+        this._visibilityPolygon = visibilityPoints;
+        this._playerRoom = this.getPlayerRoom(playerX, playerY, this.getRoomPolygons());
 
-        // Draw grey overlay on rooms player is NOT in
+        // Draw black everywhere except visibility polygon
         ctx.save();
+        ctx.fillStyle = '#000000';
+        ctx.beginPath();
 
-        const scale = 0.25; // fullmap coords to game coords
+        // Full screen rectangle
+        ctx.moveTo(0, 0);
+        ctx.lineTo(this.width, 0);
+        ctx.lineTo(this.width, this.height);
+        ctx.lineTo(0, this.height);
+        ctx.closePath();
 
-        for (const room of roomPolygons) {
-            // Skip the room the player is in
-            if (room.label === playerRoom) continue;
-
-            // Convert fullmap polygon to screen coords
-            ctx.beginPath();
-            const firstPoint = room.points[0];
-            const firstScreenX = (firstPoint.x * scale - this.camera.x) * this.cameraZoom;
-            const firstScreenY = (firstPoint.y * scale - this.camera.y) * this.cameraZoom;
-            ctx.moveTo(firstScreenX, firstScreenY);
-
-            for (let i = 1; i < room.points.length; i++) {
-                const point = room.points[i];
-                const screenX = (point.x * scale - this.camera.x) * this.cameraZoom;
-                const screenY = (point.y * scale - this.camera.y) * this.cameraZoom;
-                ctx.lineTo(screenX, screenY);
+        // Cut out visibility polygon (counter-clockwise)
+        if (visibilityPoints.length > 0) {
+            ctx.moveTo(visibilityPoints[0].x, visibilityPoints[0].y);
+            for (let i = visibilityPoints.length - 1; i >= 0; i--) {
+                ctx.lineTo(visibilityPoints[i].x, visibilityPoints[i].y);
             }
             ctx.closePath();
-
-            // Grey tint overlay (can still see map, just darker)
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-            ctx.fill();
         }
 
+        ctx.fill('evenodd');
         ctx.restore();
 
-        // Also add slight gradient at edges for atmosphere
+        // Add soft gradient at edges
         this.drawSimpleGradientVision(ctx);
     }
 
@@ -2272,21 +2274,40 @@ export class Game {
         ctx.restore();
     }
 
-    // Check if a player is visible (in same room or hallway)
+    // Check if a player is visible (using raycasting visibility polygon)
     isPlayerVisible(otherPlayer) {
         if (!this.localPlayer || this.localPlayer.isDead) return true; // Ghosts see all
         if (otherPlayer === this.localPlayer) return true;
         if (otherPlayer.isDead) return false; // Can't see ghosts unless dead
 
-        const roomPolygons = this.getRoomPolygons();
-        const myRoom = this.getPlayerRoom(this.localPlayer.x, this.localPlayer.y, roomPolygons);
-        const theirRoom = this.getPlayerRoom(otherPlayer.x, otherPlayer.y, roomPolygons);
+        // Use raycast-based visibility check
+        return this.isWorldPositionVisible(otherPlayer.x, otherPlayer.y);
+    }
 
-        // If either is in hallway (null), or same room, visible
-        if (myRoom === null || theirRoom === null || myRoom === theirRoom) {
-            return true;
+    // Check if a world position is within visible area (for hiding task outlines in shadows)
+    isWorldPositionVisible(worldX, worldY) {
+        // Ghosts see everything
+        if (!this.localPlayer || this.localPlayer.isDead) return true;
+
+        // During non-playing states, show everything
+        if (this.state !== 'playing') return true;
+
+        // Check if within visibility polygon (purely raycast-based)
+        if (this._visibilityPolygon && this._visibilityPolygon.length > 0) {
+            // Convert world coords to screen coords
+            const playerX = this.localPlayer.x;
+            const playerY = this.localPlayer.y;
+            const centerX = this.width / 2;
+            const centerY = this.height / 2;
+
+            const screenX = centerX + (worldX - playerX) * this.cameraZoom;
+            const screenY = centerY + (worldY - playerY) * this.cameraZoom;
+
+            // Check if screen point is inside visibility polygon
+            return this.pointInPolygon(screenX, screenY, this._visibilityPolygon);
         }
-        return false;
+
+        return true;
     }
 
     renderUI() {
@@ -3200,6 +3221,19 @@ export class Game {
             }
 
             if (!shouldRender) continue;
+
+            // Check visibility - skip shapes in shadowed areas
+            let shapeWorldX, shapeWorldY;
+            if (shape.type === 'box' || shape.type === 'roundedBox') {
+                shapeWorldX = (shape.x + shape.width / 2) * scale;
+                shapeWorldY = (shape.y + shape.height / 2) * scale;
+            } else if (shape.type === 'line') {
+                shapeWorldX = ((shape.x1 + shape.x2) / 2) * scale;
+                shapeWorldY = ((shape.y1 + shape.y2) / 2) * scale;
+            }
+            if (shapeWorldX !== undefined && !this.isWorldPositionVisible(shapeWorldX, shapeWorldY)) {
+                continue; // Skip this shape - it's in a shadowed area
+            }
 
             ctx.strokeStyle = strokeColor;
 
