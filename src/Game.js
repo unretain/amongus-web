@@ -4451,37 +4451,62 @@ export class Game {
 
     // Draw ejection screen with star background and floating player
     drawEjectionScreen(ctx) {
-        // Draw star background (from main menu)
-        const starsBg = assetLoader?.getTexture('stars_bg');
-        if (starsBg) {
-            // Tile the stars background to fill screen
-            const pattern = ctx.createPattern(starsBg, 'repeat');
-            ctx.fillStyle = pattern;
-            ctx.fillRect(0, 0, this.width, this.height);
-        } else {
-            ctx.fillStyle = '#0a0a1a';
-            ctx.fillRect(0, 0, this.width, this.height);
+        // Draw solid black background
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, this.width, this.height);
+
+        // Draw animated stars
+        if (!this._ejectionStars) {
+            // Generate random stars once
+            this._ejectionStars = [];
+            for (let i = 0; i < 200; i++) {
+                this._ejectionStars.push({
+                    x: Math.random() * this.width,
+                    y: Math.random() * this.height,
+                    size: Math.random() * 2 + 0.5,
+                    speed: Math.random() * 30 + 10,
+                    twinkle: Math.random() * Math.PI * 2
+                });
+            }
         }
 
-        // Draw floating player sprite (if we have an ejected player)
+        // Draw and animate stars
+        const time = Date.now() / 1000;
+        ctx.fillStyle = '#FFFFFF';
+        for (const star of this._ejectionStars) {
+            // Stars drift slowly to the left (like we're moving right through space)
+            star.x -= star.speed * 0.016;
+            if (star.x < 0) star.x = this.width;
+
+            // Twinkle effect
+            const alpha = 0.5 + Math.sin(time * 2 + star.twinkle) * 0.5;
+            ctx.globalAlpha = alpha;
+            ctx.beginPath();
+            ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+
+        // Draw floating player sprite using the MAIN player sprite (not mini voting sprite)
         if (this.ejectedPlayer) {
-            const votingTexture = assetLoader?.getTexture('voting_screen');
-            if (votingTexture) {
-                const iconSrcX = 367, iconSrcY = 588, iconSrcW = 63, iconSrcH = 52;
-                const playerScale = 2.0; // Larger sprite for ejection screen
-                const drawW = iconSrcW * playerScale;
-                const drawH = iconSrcH * playerScale;
+            const idleSprite = assetLoader?.getSprite('player_idle');
+            if (idleSprite && idleSprite.frames.length > 0) {
+                const frame = idleSprite.frames[0];
                 const playerColor = Player.COLORS[this.ejectedPlayer.color % Player.COLORS.length];
 
-                // Draw the floating player
+                // Large scale for ejection screen
+                const spriteScale = 0.8;
+
                 ctx.save();
-                // Add slight rotation for floating effect
-                const rotation = Math.sin(Date.now() / 500) * 0.1;
+                // Add rotation for floating/tumbling effect
+                const rotation = Math.sin(Date.now() / 400) * 0.3 + (Date.now() / 2000);
                 ctx.translate(this.ejectionPlayerX, this.ejectionPlayerY);
                 ctx.rotate(rotation);
-                this.drawRecoloredSprite(ctx, votingTexture,
-                    iconSrcX, iconSrcY, iconSrcW, iconSrcH,
-                    -drawW / 2, -drawH / 2, drawW, drawH, playerColor);
+
+                // Use the Player's recolor method
+                if (this.localPlayer) {
+                    this.localPlayer.drawRecoloredFrame(ctx, idleSprite.texture, frame, spriteScale, playerColor);
+                }
                 ctx.restore();
             }
         }
@@ -4490,12 +4515,12 @@ export class Game {
         const typedText = this.ejectionText.substring(0, this.ejectionTypedChars);
         if (typedText) {
             ctx.fillStyle = '#FFFFFF';
-            ctx.font = 'bold 28px Arial';
+            ctx.font = 'bold 32px Arial';
             ctx.textAlign = 'center';
             ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 4;
+            ctx.lineWidth = 5;
 
-            const textY = this.height - 100;
+            const textY = this.height - 80;
             ctx.strokeText(typedText, this.width / 2, textY);
             ctx.fillText(typedText, this.width / 2, textY);
         }
@@ -4604,11 +4629,14 @@ export class Game {
         this.ejectionTypedChars = 0;
         this.ejectionTypingTimer = 0;
 
-        // Initialize floating player position (start from center, float to the right)
-        this.ejectionPlayerX = this.width / 2;
-        this.ejectionPlayerY = this.height / 2;
-        this.ejectionPlayerVelX = 50; // Slow drift to the right
-        this.ejectionPlayerVelY = -10; // Slight upward drift
+        // Clear star cache so new stars generate
+        this._ejectionStars = null;
+
+        // Initialize floating player position (start from left, tumble across screen)
+        this.ejectionPlayerX = -100;
+        this.ejectionPlayerY = this.height / 2 - 50;
+        this.ejectionPlayerVelX = 120; // Float to the right
+        this.ejectionPlayerVelY = 15; // Slight downward drift
 
         // Set timer for 2 seconds after typing completes
         this.meetingTimer = 2.0;
