@@ -2104,6 +2104,10 @@ export class Game {
             if (player.inVent && !player.ventAnimation) {
                 continue; // Don't render player when fully in vent
             }
+            // Hide players in different rooms (room-based visibility)
+            if (player !== this.localPlayer && !this.isPlayerVisible(player)) {
+                continue;
+            }
             // Render vent animation if active
             if (player.ventAnimation) {
                 this.renderVentAnimation(this.ctx, player);
@@ -2140,92 +2144,149 @@ export class Game {
         // Ghosts have infinite vision
         if (this.localPlayer.isDead && this.ghostVision === null) return;
 
-        // Determine vision radius based on player state
+        // Get room polygons from minimap data (fullmap coordinates)
+        const roomPolygons = this.getRoomPolygons();
+        if (!roomPolygons || roomPolygons.length === 0) {
+            // Fallback to simple gradient if no room data
+            this.drawSimpleGradientVision(ctx);
+            return;
+        }
+
+        // Find which room the player is in
+        const playerRoom = this.getPlayerRoom(this.localPlayer.x, this.localPlayer.y, roomPolygons);
+
+        // Draw grey overlay on rooms player is NOT in
+        ctx.save();
+
+        const scale = 0.25; // fullmap coords to game coords
+
+        for (const room of roomPolygons) {
+            // Skip the room the player is in
+            if (room.label === playerRoom) continue;
+
+            // Convert fullmap polygon to screen coords
+            ctx.beginPath();
+            const firstPoint = room.points[0];
+            const firstScreenX = (firstPoint.x * scale - this.camera.x) * this.cameraZoom;
+            const firstScreenY = (firstPoint.y * scale - this.camera.y) * this.cameraZoom;
+            ctx.moveTo(firstScreenX, firstScreenY);
+
+            for (let i = 1; i < room.points.length; i++) {
+                const point = room.points[i];
+                const screenX = (point.x * scale - this.camera.x) * this.cameraZoom;
+                const screenY = (point.y * scale - this.camera.y) * this.cameraZoom;
+                ctx.lineTo(screenX, screenY);
+            }
+            ctx.closePath();
+
+            // Grey tint overlay (can still see map, just darker)
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.fill();
+        }
+
+        ctx.restore();
+
+        // Also add slight gradient at edges for atmosphere
+        this.drawSimpleGradientVision(ctx);
+    }
+
+    // Get room polygons from loaded minimap data
+    getRoomPolygons() {
+        if (this._roomPolygonsCache) return this._roomPolygonsCache;
+
+        // Room polygons in fullmap coordinates (from minimap-rooms.json)
+        this._roomPolygonsCache = [
+            { label: 'upper engine', points: [{x:1450,y:771},{x:1461,y:1526},{x:2319,y:1541},{x:2319,y:603},{x:1686,y:599},{x:1442,y:782}] },
+            { label: 'reactor', points: [{x:1254,y:1426},{x:1259,y:1707},{x:1545,y:1736},{x:1531,y:2570},{x:1259,y:2584},{x:1264,y:2885},{x:1092,y:2894},{x:734,y:2685},{x:725,y:1626},{x:1049,y:1411},{x:1225,y:1407}] },
+            { label: 'lower engine', points: [{x:1473,y:2832},{x:2332,y:2837},{x:2322,y:3777},{x:1674,y:3796},{x:1478,y:3605},{x:1473,y:2842}] },
+            { label: 'security', points: [{x:2384,y:2565},{x:2370,y:1764},{x:2522,y:1616},{x:2685,y:1607},{x:2875,y:1740},{x:2885,y:2556},{x:2413,y:2580}] },
+            { label: 'electrical', points: [{x:3119,y:3610},{x:3128,y:2499},{x:4091,y:2503},{x:4067,y:2742},{x:3843,y:2952},{x:3853,y:3304},{x:3633,y:3510},{x:3414,y:3519},{x:3147,y:3548}] },
+            { label: 'medbay', points: [{x:2966,y:1292},{x:2961,y:2108},{x:3099,y:2308},{x:4082,y:2289},{x:4072,y:2074},{x:3743,y:1769},{x:3710,y:1302},{x:2971,y:1287}] },
+            { label: 'storage', points: [{x:4048,y:3037},{x:4315,y:2737},{x:5188,y:2766},{x:5164,y:4406},{x:4454,y:4401},{x:4058,y:4053},{x:4067,y:3028}] },
+            { label: 'admin', points: [{x:5326,y:3119},{x:5341,y:2298},{x:6247,y:2289},{x:6256,y:2937},{x:6104,y:3119},{x:5345,y:3123}] },
+            { label: 'comms', points: [{x:5264,y:3719},{x:5255,y:4225},{x:5450,y:4411},{x:5984,y:4401},{x:6137,y:4239},{x:6170,y:3734},{x:5279,y:3710}] },
+            { label: 'shields', points: [{x:6266,y:3958},{x:6270,y:3200},{x:6452,y:2999},{x:7067,y:2990},{x:7110,y:3567},{x:6685,y:3972},{x:6270,y:3948}] },
+            { label: 'o2', points: [{x:5703,y:2184},{x:5708,y:1907},{x:6018,y:1564},{x:6323,y:1574},{x:6404,y:2170},{x:5708,y:2203}] },
+            { label: 'weapons', points: [{x:6232,y:1192},{x:6266,y:467},{x:6700,y:458},{x:7091,y:877},{x:7110,y:1402},{x:6595,y:1431},{x:6580,y:1216},{x:6223,y:1168}] },
+            { label: 'navigation', points: [{x:7802,y:2491},{x:7796,y:1633},{x:8112,y:1639},{x:8458,y:1889},{x:8434,y:2217},{x:8166,y:2491},{x:7820,y:2474}] },
+            { label: 'cafeteria', points: [{x:3898,y:1627},{x:4280,y:2038},{x:5436,y:2050},{x:5901,y:1621},{x:5913,y:566},{x:5358,y:48},{x:4178,y:30},{x:3886,y:387},{x:3868,y:1597}] }
+        ];
+        return this._roomPolygonsCache;
+    }
+
+    // Check which room a point is in using point-in-polygon test
+    getPlayerRoom(x, y, roomPolygons) {
+        // Convert game coords to fullmap coords
+        const fullX = x / 0.25;
+        const fullY = y / 0.25;
+
+        for (const room of roomPolygons) {
+            if (this.pointInPolygon(fullX, fullY, room.points)) {
+                return room.label;
+            }
+        }
+        return null; // In hallway or unknown area
+    }
+
+    // Point-in-polygon test using ray casting algorithm
+    pointInPolygon(x, y, polygon) {
+        let inside = false;
+        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+            const xi = polygon[i].x, yi = polygon[i].y;
+            const xj = polygon[j].x, yj = polygon[j].y;
+
+            if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+                inside = !inside;
+            }
+        }
+        return inside;
+    }
+
+    // Simple gradient vision for edges/atmosphere
+    drawSimpleGradientVision(ctx) {
         let visionRadius;
         if (this.localPlayer.isDead) {
-            visionRadius = this.ghostVision;
+            visionRadius = this.ghostVision || 600;
         } else if (this.localPlayer.isImpostor) {
             visionRadius = this.impostorVision;
         } else {
             visionRadius = this.crewmateVision;
         }
 
-        const playerX = this.localPlayer.x;
-        const playerY = this.localPlayer.y;
+        const scaledRadius = visionRadius * this.cameraZoom;
         const centerX = this.width / 2;
         const centerY = this.height / 2;
-        const scaledRadius = visionRadius * this.cameraZoom;
+        const maxDist = Math.sqrt(this.width ** 2 + this.height ** 2);
 
-        // Check if collision data is available for wall shadows
-        const hasCollision = this.map && this.map.collisionData;
-
-        // Cast rays to build visibility polygon (only if collision data exists)
-        const visibilityPoints = [];
-        const numRays = 90;
-
-        for (let i = 0; i < numRays; i++) {
-            const angle = (i / numRays) * Math.PI * 2;
-            const cos = Math.cos(angle);
-            const sin = Math.sin(angle);
-
-            let hitDist = visionRadius;
-
-            // Only do wall raycasting if collision data is loaded
-            if (hasCollision) {
-                // Start ray at 30px out to avoid hitting nearby walls
-                for (let dist = 30; dist < visionRadius; dist += 8) {
-                    const checkX = playerX + cos * dist;
-                    const checkY = playerY + sin * dist;
-
-                    if (this.map.isPixelBlocked(checkX, checkY)) {
-                        hitDist = dist;
-                        break;
-                    }
-                }
-            }
-
-            // Convert to screen coords
-            const screenX = centerX + cos * hitDist * this.cameraZoom;
-            const screenY = centerY + sin * hitDist * this.cameraZoom;
-            visibilityPoints.push({ x: screenX, y: screenY });
-        }
-
-        // Draw black overlay everywhere
-        ctx.save();
-        ctx.fillStyle = '#000000';
-        ctx.beginPath();
-
-        // Outer rectangle (full screen)
-        ctx.moveTo(0, 0);
-        ctx.lineTo(this.width, 0);
-        ctx.lineTo(this.width, this.height);
-        ctx.lineTo(0, this.height);
-        ctx.closePath();
-
-        // Inner visibility polygon (cut out) - draw counter-clockwise
-        if (visibilityPoints.length > 0) {
-            ctx.moveTo(visibilityPoints[0].x, visibilityPoints[0].y);
-            for (let i = visibilityPoints.length - 1; i >= 0; i--) {
-                ctx.lineTo(visibilityPoints[i].x, visibilityPoints[i].y);
-            }
-            ctx.closePath();
-        }
-
-        ctx.fill('evenodd');
-        ctx.restore();
-
-        // Add gradient fade at the edges of visibility
         ctx.save();
         const gradient = ctx.createRadialGradient(
-            centerX, centerY, scaledRadius * 0.6,
-            centerX, centerY, scaledRadius * 1.2
+            centerX, centerY, scaledRadius * 0.9,
+            centerX, centerY, maxDist
         );
         gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
-        gradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.4)');
-        gradient.addColorStop(1, 'rgba(0, 0, 0, 0.8)');
+        gradient.addColorStop(0.3, 'rgba(0, 0, 0, 0.2)');
+        gradient.addColorStop(0.6, 'rgba(0, 0, 0, 0.5)');
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0.85)');
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, this.width, this.height);
         ctx.restore();
+    }
+
+    // Check if a player is visible (in same room or hallway)
+    isPlayerVisible(otherPlayer) {
+        if (!this.localPlayer || this.localPlayer.isDead) return true; // Ghosts see all
+        if (otherPlayer === this.localPlayer) return true;
+        if (otherPlayer.isDead) return false; // Can't see ghosts unless dead
+
+        const roomPolygons = this.getRoomPolygons();
+        const myRoom = this.getPlayerRoom(this.localPlayer.x, this.localPlayer.y, roomPolygons);
+        const theirRoom = this.getPlayerRoom(otherPlayer.x, otherPlayer.y, roomPolygons);
+
+        // If either is in hallway (null), or same room, visible
+        if (myRoom === null || theirRoom === null || myRoom === theirRoom) {
+            return true;
+        }
+        return false;
     }
 
     renderUI() {
