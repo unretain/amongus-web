@@ -271,8 +271,19 @@ export class Game {
 
         // Player left room - update game lobby
         this.network.onPlayerLeftRoom = (data) => {
-            console.log('Player left:', data.playerId);
+            console.log('Player left:', data.playerId, 'newHostId:', data.newHostId);
             this.gameLobbyScreen.removePlayer(data.playerId);
+
+            // Check if we became the new host
+            if (data.newHostId && this.network.socket && data.newHostId === this.network.socket.id) {
+                console.log('We are now the host!');
+                this.gameLobbyScreen.isHost = true;
+            }
+
+            // Update room info if provided
+            if (data.roomInfo) {
+                this.gameLobbyScreen.updateFromRoomInfo(data.roomInfo);
+            }
         };
 
         // Settings updated
@@ -5348,12 +5359,22 @@ export class Game {
         this.victoryButtons = null;
         this.deadBodies = [];
         this.meetingActive = false;
+        this.meetingPhase = 'none';
         this.activeTask = null;
         this.activeSabotage = null;
+        this.sabotageTimer = 0;
         this.sabotageMenuOpen = false;
         this.chatMessages = [];
         this.chatInput = '';
         this.chatOpen = false;
+        this.ventCooldown = 0;
+        this.killCooldown = 0;
+
+        // Stop any playing sounds
+        if (this.sabotageAlarmSound) {
+            this.sabotageAlarmSound.pause();
+            this.sabotageAlarmSound.currentTime = 0;
+        }
 
         // Reset tasks
         this.tasks = [];
@@ -5363,16 +5384,32 @@ export class Game {
         if (this.localPlayer) {
             this.localPlayer.isDead = false;
             this.localPlayer.isImpostor = false;
+            this.localPlayer.inVent = false;
         }
 
         // Reset all players
         for (const player of this.players.values()) {
             player.isDead = false;
             player.isImpostor = false;
+            player.inVent = false;
+        }
+
+        // Update game lobby screen with room info
+        if (data.roomInfo && this.gameLobbyScreen) {
+            // Check if we are the host
+            const isHost = this.network.socket && data.roomInfo.hostId === this.network.socket.id;
+            this.gameLobbyScreen.isHost = isHost;
+            console.log('Returned to lobby - isHost:', isHost, 'hostId:', data.roomInfo.hostId, 'myId:', this.network.socket?.id);
+
+            // Update player list from server data
+            this.gameLobbyScreen.updateFromRoomInfo(data.roomInfo);
         }
 
         // Return to game lobby state
         this.state = 'game_lobby';
+
+        // Play lobby music
+        this.playThemeMusic();
 
         console.log('Game state reset, now in lobby');
     }

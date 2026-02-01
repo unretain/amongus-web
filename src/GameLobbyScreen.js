@@ -376,6 +376,63 @@ export class GameLobbyScreen {
         console.log('Lobby settings updated:', this.settings);
     }
 
+    // Update entire room state from server room info (used for play again, host migration)
+    updateFromRoomInfo(roomInfo) {
+        if (!roomInfo) return;
+
+        console.log('Updating from room info:', roomInfo);
+
+        // Update room code
+        if (roomInfo.code) {
+            this.roomCode = roomInfo.code;
+        }
+
+        // Update settings
+        if (roomInfo.settings) {
+            this.settings = { ...this.settings, ...roomInfo.settings };
+        }
+
+        // Sync player list with server state
+        if (roomInfo.players && Array.isArray(roomInfo.players)) {
+            // Keep track of local player
+            const localPlayerId = this.localPlayer?.id;
+
+            // Clear and rebuild player list
+            this.players.clear();
+
+            for (const playerData of roomInfo.players) {
+                const player = {
+                    id: playerData.id,
+                    name: playerData.name,
+                    color: playerData.color,
+                    x: 0,
+                    y: 0,
+                    velocityX: 0,
+                    velocityY: 0,
+                    moving: false,
+                    facingLeft: false,
+                    isHost: playerData.isHost || playerData.id === roomInfo.hostId
+                };
+
+                // Position players in lobby
+                const index = this.players.size;
+                const row = Math.floor(index / 5);
+                const col = index % 5;
+                player.x = 1150 + col * 150;
+                player.y = 450 + row * 180;
+
+                this.players.set(player.id, player);
+
+                // Restore local player reference
+                if (player.id === localPlayerId) {
+                    this.localPlayer = player;
+                }
+            }
+
+            console.log(`Updated player list from room info: ${this.players.size} players`);
+        }
+    }
+
     hide() {
         this.active = false;
         this.players.clear();
