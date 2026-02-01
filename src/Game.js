@@ -2130,6 +2130,9 @@ export class Game {
     drawVisionOverlay(ctx) {
         if (!this.localPlayer) return;
 
+        // Only apply vision during actual gameplay
+        if (this.state !== 'playing') return;
+
         // Skip vision during meetings or full-screen overlays
         const isFullScreenTask = this.activeTask && !this.activeTask.isWorldTask;
         if (this.meetingActive || isFullScreenTask || this.adminMapOpen || this.sabotageMenuOpen) return;
