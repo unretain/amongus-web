@@ -123,7 +123,7 @@ export class Game {
 
         // Vent cooldown state (imposter)
         this.ventCooldown = 0; // Cooldown timer in seconds
-        this.ventCooldownMax = 10; // 10 seconds cooldown
+        this.ventCooldownMax = 17; // 17 seconds cooldown
         this.ventAutoEjectTime = 10; // Auto-eject after 10 seconds in vent
         this.ventTimer = 0; // Time spent in current vent
         this.currentVent = null; // Track which vent player is in
@@ -141,7 +141,7 @@ export class Game {
         // Active sabotage state (reactor/O2 critical sabotages)
         this.activeSabotage = null; // 'reactor' or '02' or null
         this.sabotageTimer = 0; // Countdown in seconds
-        this.sabotageTimerMax = 20; // 20 seconds to fix
+        this.sabotageTimerMax = 30; // 30 seconds to fix
         this.sabotageAlarmSound = null;
         this.loadSabotageAlarmSound();
 
@@ -3332,53 +3332,66 @@ export class Game {
     }
 
     drawTaskArrow(ctx) {
-        let targetX, targetY, labelName, labelRoom;
-
-        // If sabotage is active, point to sabotage location instead of tasks
-        if (this.activeSabotage && this.sabotageLocations[this.activeSabotage]) {
-            const sabotageTarget = this.sabotageLocations[this.activeSabotage];
-            targetX = sabotageTarget.x;
-            targetY = sabotageTarget.y;
-            labelName = this.activeSabotage === 'reactor' ? 'REACTOR' : 'O2';
-            labelRoom = 'EMERGENCY';
-        } else {
-            // Find the next incomplete task to point to
-            // Priority: enabled tasks that aren't completed (skip disabled ReceivePower tasks)
-            let nextTask = null;
-            for (const task of this.tasks) {
-                // Skip completed tasks
-                if (task.completed) continue;
-                // Skip disabled tasks (like ReceivePower before Divert is done)
-                if (task.enabled === false) continue;
-
-                // Found an incomplete, enabled task
-                nextTask = task;
-                break;
-            }
-
-            if (!nextTask) return;
-
-            targetX = nextTask.x;
-            targetY = nextTask.y;
-            labelName = nextTask.name;
-            labelRoom = nextTask.room;
-        }
-
         const arrowTexture = assetLoader?.getTexture('task_arrow');
         if (!arrowTexture) return;
 
-        // Calculate angle from player to target
-        const dx = targetX - this.localPlayer.x;
-        const dy = targetY - this.localPlayer.y;
-        const angle = Math.atan2(dy, dx);
-
-        // Draw arrow near the player (center of screen with offset in target direction)
         const centerX = this.width / 2;
         const centerY = this.height / 2;
-        const arrowOffset = 80; // Distance from player center
+        const arrowOffset = 80;
+        const arrowSize = 40;
+
+        // If sabotage is active, draw TWO arrows pointing to both fix locations
+        if (this.activeSabotage) {
+            let targets = [];
+            if (this.activeSabotage === 'reactor') {
+                // Reactor has two panels
+                targets = [
+                    { x: 320, y: 540 },   // Left reactor panel
+                    { x: 320, y: 680 }    // Right reactor panel
+                ];
+            } else if (this.activeSabotage === '02') {
+                // O2 has two keypads
+                targets = this.o2Locations || [
+                    { x: 1542, y: 459 },
+                    { x: 1538, y: 618 }
+                ];
+            }
+
+            // Draw arrow to each target
+            for (const target of targets) {
+                const dx = target.x - this.localPlayer.x;
+                const dy = target.y - this.localPlayer.y;
+                const angle = Math.atan2(dy, dx);
+                const arrowX = centerX + Math.cos(angle) * arrowOffset;
+                const arrowY = centerY + Math.sin(angle) * arrowOffset;
+
+                ctx.save();
+                ctx.translate(arrowX, arrowY);
+                ctx.rotate(angle);
+                // Tint arrow red for emergency
+                ctx.filter = 'hue-rotate(-50deg) saturate(2)';
+                ctx.drawImage(arrowTexture, -arrowSize / 2, -arrowSize / 2, arrowSize, arrowSize);
+                ctx.restore();
+            }
+            return;
+        }
+
+        // Normal task arrow
+        let nextTask = null;
+        for (const task of this.tasks) {
+            if (task.completed) continue;
+            if (task.enabled === false) continue;
+            nextTask = task;
+            break;
+        }
+
+        if (!nextTask) return;
+
+        const dx = nextTask.x - this.localPlayer.x;
+        const dy = nextTask.y - this.localPlayer.y;
+        const angle = Math.atan2(dy, dx);
         const arrowX = centerX + Math.cos(angle) * arrowOffset;
         const arrowY = centerY + Math.sin(angle) * arrowOffset;
-        const arrowSize = 40;
 
         ctx.save();
         ctx.translate(arrowX, arrowY);
