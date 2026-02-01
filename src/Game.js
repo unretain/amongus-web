@@ -5478,8 +5478,8 @@ export class Game {
     // Called when sabotage timer runs out - impostors win
     onSabotageTimerExpired() {
         console.log('SABOTAGE TIMER EXPIRED - IMPOSTORS WIN!');
-        // TODO: Show impostor win screen
-        // For now just log and stop the alarm
+
+        // Stop alarm sound
         if (this.sabotageAlarmSound) {
             this.sabotageAlarmSound.pause();
             this.sabotageAlarmSound.currentTime = 0;
@@ -5487,9 +5487,8 @@ export class Game {
         this.activeSabotage = null;
         this.sabotageTimer = 0;
 
-        // Trigger impostor victory
-        this.gameOver = true;
-        this.impostorsWin = true;
+        // Trigger impostor victory - use proper game over system
+        this.triggerGameOver('impostors');
     }
 
     onPlayerVoted(data) {
