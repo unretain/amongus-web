@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Wall Corner Editor - Raycasting</title>
+    <style>
+        body {
+            background: #1a1a2e;
+            color: white;
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #container {
+            position: relative;
+            display: inline-block;
+            overflow: auto;
+            max-width: 95vw;
+            max-height: 70vh;
+            border: 2px solid #444;
+        }
+        #mapCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #wallCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            cursor: crosshair;
+        }
+        #controls {
+            margin-bottom: 15px;
+            padding: 15px;
+            background: #2a2a4a;
+            border-radius: 8px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #4ecdc4;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover { background: #45b7aa; }
+        button.active { background: #ff6b6b; }
+        button.danger { background: #e74c3c; }
+        button.danger:hover { background: #c0392b; }
+        button.success { background: #2ecc71; }
+        button.success:hover { background: #27ae60; }
+        h1 { color: #ff6b6b; }
+        h3 { color: #4ecdc4; margin-top: 0; }
+        .tool-group {
+            display: inline-block;
+            margin-right: 20px;
+            padding: 10px;
+            background: #1a1a2e;
+            border-radius: 5px;
+            vertical-align: top;
+        }
+        .tool-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #888;
+        }
+        #wallList {
+            margin-top: 10px;
+            padding: 10px;
+            background: #1a1a2e;
+            border-radius: 5px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .wall-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            margin: 4px 0;
+            background: #2a2a4a;
+            border-radius: 3px;
+            border-left: 4px solid #ff6b6b;
+        }
+        .wall-item button {
+            padding: 5px 10px;
+            margin: 0 2px;
+            font-size: 12px;
+        }
+        #instructions {
+            margin-top: 15px;
+            padding: 15px;
+            background: #2a2a4a;
+            border-radius: 8px;
+        }
+        #instructions ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        #instructions li {
+            margin: 5px 0;
+        }
+        .key {
+            background: #444;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        #output {
+            margin-top: 15px;
+            padding: 15px;
+            background: #0a0a1a;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow: auto;
+            white-space: pre-wrap;
+        }
+        #coordsDisplay {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.8);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>Wall Corner Editor - For Raycasting Shadows</h1>
+
+    <div id="controls">
+        <div class="tool-group">
+            <label>Mode:</label>
+            <button id="drawBtn" class="active">Draw Wall</button>
+            <button id="selectBtn">Select/Delete</button>
+        </div>
+
+        <div class="tool-group">
+            <label>Actions:</label>
+            <button id="finishWallBtn">Finish Wall (Enter)</button>
+            <button id="undoBtn">Undo Point (Z)</button>
+            <button id="clearBtn" class="danger">Clear All</button>
+        </div>
+
+        <div class="tool-group">
+            <label>Data:</label>
+            <button id="exportBtn" class="success">Export JSON</button>
+            <button id="importBtn">Import JSON</button>
+            <button id="copyBtn">Copy to Clipboard</button>
+        </div>
+    </div>
+
+    <div id="container">
+        <canvas id="mapCanvas"></canvas>
+        <canvas id="wallCanvas"></canvas>
+    </div>
+
+    <div id="coordsDisplay">X: 0, Y: 0</div>
+
+    <div id="instructions">
+        <h3>Instructions</h3>
+        <ul>
+            <li><span class="key">Click</span> - Place wall corner point</li>
+            <li><span class="key">Enter</span> - Finish current wall segment</li>
+            <li><span class="key">Z</span> - Undo last point</li>
+            <li><span class="key">Escape</span> - Cancel current wall</li>
+            <li><span class="key">Delete</span> - Delete selected wall (in select mode)</li>
+        </ul>
+        <p>Draw walls along the edges where you want shadows to be cast. The raycasting will use these wall segments.</p>
+    </div>
+
+    <div id="wallList">
+        <h3>Walls (<span id="wallCount">0</span>)</h3>
+        <div id="wallItems"></div>
+    </div>
+
+    <div id="output">
+        <h3>JSON Output</h3>
+        <pre id="jsonOutput">{}</pre>
+    </div>
+
+    <input type="file" id="importFile" style="display: none" accept=".json">
+
+    <script>
+        const mapCanvas = document.getElementById('mapCanvas');
+        const wallCanvas = document.getElementById('wallCanvas');
+        const mapCtx = mapCanvas.getContext('2d');
+        const wallCtx = wallCanvas.getContext('2d');
+        const container = document.getElementById('container');
+
+        let walls = []; // Array of wall segments, each is array of {x, y} points
+        let currentWall = []; // Points being drawn
+        let selectedWall = -1;
+        let mode = 'draw'; // 'draw' or 'select'
+        let mapImage = null;
+
+        // Load map image
+        const img = new Image();
+        img.onload = () => {
+            mapImage = img;
+            mapCanvas.width = img.width;
+            mapCanvas.height = img.height;
+            wallCanvas.width = img.width;
+            wallCanvas.height = img.height;
+            container.style.width = img.width + 'px';
+            container.style.height = img.height + 'px';
+            mapCtx.drawImage(img, 0, 0);
+            render();
+        };
+        img.src = '/assets/skeld-full.png';
+
+        // Mouse position tracking
+        wallCanvas.addEventListener('mousemove', (e) => {
+            const rect = wallCanvas.getBoundingClientRect();
+            const x = Math.round((e.clientX - rect.left) * (wallCanvas.width / rect.width));
+            const y = Math.round((e.clientY - rect.top) * (wallCanvas.height / rect.height));
+            document.getElementById('coordsDisplay').textContent = `X: ${x}, Y: ${y} | Game: ${Math.round(x * 0.25)}, ${Math.round(y * 0.25)}`;
+
+            // Preview line while drawing
+            if (mode === 'draw' && currentWall.length > 0) {
+                render();
+                wallCtx.strokeStyle = '#ffff00';
+                wallCtx.lineWidth = 2;
+                wallCtx.setLineDash([5, 5]);
+                wallCtx.beginPath();
+                wallCtx.moveTo(currentWall[currentWall.length - 1].x, currentWall[currentWall.length - 1].y);
+                wallCtx.lineTo(x, y);
+                wallCtx.stroke();
+                wallCtx.setLineDash([]);
+            }
+        });
+
+        // Click to place point or select
+        wallCanvas.addEventListener('click', (e) => {
+            const rect = wallCanvas.getBoundingClientRect();
+            const x = Math.round((e.clientX - rect.left) * (wallCanvas.width / rect.width));
+            const y = Math.round((e.clientY - rect.top) * (wallCanvas.height / rect.height));
+
+            if (mode === 'draw') {
+                currentWall.push({ x, y });
+                render();
+            } else if (mode === 'select') {
+                // Find closest wall
+                selectedWall = findClosestWall(x, y);
+                render();
+            }
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                finishWall();
+            } else if (e.key === 'z' || e.key === 'Z') {
+                undoPoint();
+            } else if (e.key === 'Escape') {
+                currentWall = [];
+                render();
+            } else if (e.key === 'Delete' && selectedWall >= 0) {
+                walls.splice(selectedWall, 1);
+                selectedWall = -1;
+                render();
+                updateWallList();
+                updateOutput();
+            }
+        });
+
+        // Button handlers
+        document.getElementById('drawBtn').addEventListener('click', () => {
+            mode = 'draw';
+            document.getElementById('drawBtn').classList.add('active');
+            document.getElementById('selectBtn').classList.remove('active');
+            selectedWall = -1;
+            render();
+        });
+
+        document.getElementById('selectBtn').addEventListener('click', () => {
+            mode = 'select';
+            document.getElementById('selectBtn').classList.add('active');
+            document.getElementById('drawBtn').classList.remove('active');
+            if (currentWall.length > 0) {
+                finishWall();
+            }
+            render();
+        });
+
+        document.getElementById('finishWallBtn').addEventListener('click', finishWall);
+        document.getElementById('undoBtn').addEventListener('click', undoPoint);
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            if (confirm('Clear all walls?')) {
+                walls = [];
+                currentWall = [];
+                selectedWall = -1;
+                render();
+                updateWallList();
+                updateOutput();
+            }
+        });
+
+        document.getElementById('exportBtn').addEventListener('click', () => {
+            const data = exportData();
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'wall-segments.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        document.getElementById('copyBtn').addEventListener('click', () => {
+            const data = exportData();
+            navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+            alert('Copied to clipboard!');
+        });
+
+        document.getElementById('importBtn').addEventListener('click', () => {
+            document.getElementById('importFile').click();
+        });
+
+        document.getElementById('importFile').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = JSON.parse(e.target.result);
+                        if (data.walls) {
+                            walls = data.walls;
+                            render();
+                            updateWallList();
+                            updateOutput();
+                        }
+                    } catch (err) {
+                        alert('Invalid JSON file');
+                    }
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        function finishWall() {
+            if (currentWall.length >= 2) {
+                walls.push([...currentWall]);
+                currentWall = [];
+                render();
+                updateWallList();
+                updateOutput();
+            }
+        }
+
+        function undoPoint() {
+            if (currentWall.length > 0) {
+                currentWall.pop();
+                render();
+            }
+        }
+
+        function findClosestWall(x, y) {
+            let closest = -1;
+            let minDist = 20; // Minimum distance to select
+
+            walls.forEach((wall, index) => {
+                for (let i = 0; i < wall.length - 1; i++) {
+                    const dist = distToSegment({ x, y }, wall[i], wall[i + 1]);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        closest = index;
+                    }
+                }
+            });
+
+            return closest;
+        }
+
+        function distToSegment(p, v, w) {
+            const l2 = (v.x - w.x) ** 2 + (v.y - w.y) ** 2;
+            if (l2 === 0) return Math.sqrt((p.x - v.x) ** 2 + (p.y - v.y) ** 2);
+            let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
+            t = Math.max(0, Math.min(1, t));
+            return Math.sqrt((p.x - (v.x + t * (w.x - v.x))) ** 2 + (p.y - (v.y + t * (w.y - v.y))) ** 2);
+        }
+
+        function render() {
+            wallCtx.clearRect(0, 0, wallCanvas.width, wallCanvas.height);
+
+            // Draw completed walls
+            walls.forEach((wall, index) => {
+                const isSelected = index === selectedWall;
+                wallCtx.strokeStyle = isSelected ? '#00ff00' : '#ff0000';
+                wallCtx.lineWidth = isSelected ? 4 : 2;
+
+                wallCtx.beginPath();
+                for (let i = 0; i < wall.length; i++) {
+                    if (i === 0) {
+                        wallCtx.moveTo(wall[i].x, wall[i].y);
+                    } else {
+                        wallCtx.lineTo(wall[i].x, wall[i].y);
+                    }
+                }
+                wallCtx.stroke();
+
+                // Draw corner points
+                wall.forEach((point, pIndex) => {
+                    wallCtx.fillStyle = isSelected ? '#00ff00' : '#ffff00';
+                    wallCtx.beginPath();
+                    wallCtx.arc(point.x, point.y, 5, 0, Math.PI * 2);
+                    wallCtx.fill();
+                });
+            });
+
+            // Draw current wall being created
+            if (currentWall.length > 0) {
+                wallCtx.strokeStyle = '#ffff00';
+                wallCtx.lineWidth = 2;
+                wallCtx.beginPath();
+                for (let i = 0; i < currentWall.length; i++) {
+                    if (i === 0) {
+                        wallCtx.moveTo(currentWall[i].x, currentWall[i].y);
+                    } else {
+                        wallCtx.lineTo(currentWall[i].x, currentWall[i].y);
+                    }
+                }
+                wallCtx.stroke();
+
+                // Draw points
+                currentWall.forEach((point) => {
+                    wallCtx.fillStyle = '#00ffff';
+                    wallCtx.beginPath();
+                    wallCtx.arc(point.x, point.y, 6, 0, Math.PI * 2);
+                    wallCtx.fill();
+                });
+            }
+        }
+
+        function updateWallList() {
+            document.getElementById('wallCount').textContent = walls.length;
+            const container = document.getElementById('wallItems');
+            container.innerHTML = '';
+
+            walls.forEach((wall, index) => {
+                const div = document.createElement('div');
+                div.className = 'wall-item';
+                div.innerHTML = `
+                    <span>Wall ${index + 1}: ${wall.length} points</span>
+                    <div>
+                        <button onclick="selectWall(${index})">Select</button>
+                        <button class="danger" onclick="deleteWall(${index})">Delete</button>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function selectWall(index) {
+            selectedWall = index;
+            mode = 'select';
+            document.getElementById('selectBtn').classList.add('active');
+            document.getElementById('drawBtn').classList.remove('active');
+            render();
+        }
+
+        function deleteWall(index) {
+            walls.splice(index, 1);
+            if (selectedWall === index) selectedWall = -1;
+            render();
+            updateWallList();
+            updateOutput();
+        }
+
+        function exportData() {
+            // Convert to game coordinates (multiply by 0.25)
+            const gameWalls = walls.map(wall =>
+                wall.map(point => ({
+                    x: Math.round(point.x * 0.25),
+                    y: Math.round(point.y * 0.25)
+                }))
+            );
+
+            // Also create line segments for easy raycasting
+            const segments = [];
+            walls.forEach(wall => {
+                for (let i = 0; i < wall.length - 1; i++) {
+                    segments.push({
+                        x1: Math.round(wall[i].x * 0.25),
+                        y1: Math.round(wall[i].y * 0.25),
+                        x2: Math.round(wall[i + 1].x * 0.25),
+                        y2: Math.round(wall[i + 1].y * 0.25)
+                    });
+                }
+            });
+
+            return {
+                walls: walls, // Full resolution
+                gameWalls: gameWalls, // Game coordinates
+                segments: segments, // Line segments for raycasting
+                meta: {
+                    scale: 0.25,
+                    created: new Date().toISOString()
+                }
+            };
+        }
+
+        function updateOutput() {
+            document.getElementById('jsonOutput').textContent = JSON.stringify(exportData(), null, 2);
+        }
+
+        // Make functions global for onclick handlers
+        window.selectWall = selectWall;
+        window.deleteWall = deleteWall;
+    </script>
+</body>
+</html>
