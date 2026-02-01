@@ -2125,109 +2125,35 @@ export class Game {
         // Determine vision radius
         let visionRadius = this.localPlayer.isImpostor ? this.impostorVision : this.crewmateVision;
 
-        const playerX = this.localPlayer.x;
-        const playerY = this.localPlayer.y;
         const centerX = this.width / 2;
         const centerY = this.height / 2;
+        const scaledRadius = visionRadius * this.cameraZoom;
 
-        // Get wall segments from room polygons
-        const wallSegments = this.getWallSegments();
+        // Store player room for visibility checks
+        this._playerRoom = this.getPlayerRoom(this.localPlayer.x, this.localPlayer.y, this.getRoomPolygons());
 
-        // Cast rays to build visibility polygon using wall segments
-        const numRays = 180;
-        const visibilityPoints = [];
-
-        for (let i = 0; i < numRays; i++) {
-            const angle = (i / numRays) * Math.PI * 2;
-            const cos = Math.cos(angle);
-            const sin = Math.sin(angle);
-
-            let hitDist = visionRadius;
-
-            // Check intersection with each wall segment
-            const rayEnd = {
-                x: playerX + cos * visionRadius,
-                y: playerY + sin * visionRadius
-            };
-
-            for (const wall of wallSegments) {
-                const intersection = this.raySegmentIntersect(
-                    playerX, playerY, rayEnd.x, rayEnd.y,
-                    wall.x1, wall.y1, wall.x2, wall.y2
-                );
-                if (intersection) {
-                    const dist = Math.sqrt((intersection.x - playerX) ** 2 + (intersection.y - playerY) ** 2);
-                    if (dist < hitDist) {
-                        hitDist = dist;
-                    }
-                }
-            }
-
-            // Convert to screen coords
-            const screenX = centerX + cos * hitDist * this.cameraZoom;
-            const screenY = centerY + sin * hitDist * this.cameraZoom;
-            visibilityPoints.push({ x: screenX, y: screenY });
-        }
-
-        // Store visible area for task outline filtering
-        this._visibilityPolygon = visibilityPoints;
-        this._playerRoom = this.getPlayerRoom(playerX, playerY, this.getRoomPolygons());
-
-        // Draw GRAY shadow (not black) everywhere except visibility polygon
         ctx.save();
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; // Gray tint, not full black
+
+        // Draw gray overlay outside vision circle
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
         ctx.beginPath();
+        ctx.rect(0, 0, this.width, this.height);
+        ctx.arc(centerX, centerY, scaledRadius, 0, Math.PI * 2, true);
+        ctx.fill();
 
-        // Full screen rectangle
-        ctx.moveTo(0, 0);
-        ctx.lineTo(this.width, 0);
-        ctx.lineTo(this.width, this.height);
-        ctx.lineTo(0, this.height);
-        ctx.closePath();
+        // Add soft gradient at edge of vision
+        const gradient = ctx.createRadialGradient(centerX, centerY, scaledRadius * 0.85, centerX, centerY, scaledRadius);
+        gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0.4)');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, scaledRadius, 0, Math.PI * 2);
+        ctx.fill();
 
-        // Cut out visibility polygon (counter-clockwise)
-        if (visibilityPoints.length > 0) {
-            ctx.moveTo(visibilityPoints[0].x, visibilityPoints[0].y);
-            for (let i = visibilityPoints.length - 1; i >= 0; i--) {
-                ctx.lineTo(visibilityPoints[i].x, visibilityPoints[i].y);
-            }
-            ctx.closePath();
-        }
-
-        ctx.fill('evenodd');
         ctx.restore();
-
-        // Add soft gradient at edges
-        this.drawSimpleGradientVision(ctx);
     }
 
-    // Get wall segments from room polygon edges (in game coordinates)
-    getWallSegments() {
-        if (this._wallSegmentsCache) return this._wallSegmentsCache;
-
-        const segments = [];
-        const rooms = this.getRoomPolygons();
-        const scale = 0.25; // Convert fullmap coords to game coords
-
-        for (const room of rooms) {
-            const points = room.points;
-            for (let i = 0; i < points.length; i++) {
-                const p1 = points[i];
-                const p2 = points[(i + 1) % points.length];
-                segments.push({
-                    x1: p1.x * scale,
-                    y1: p1.y * scale,
-                    x2: p2.x * scale,
-                    y2: p2.y * scale
-                });
-            }
-        }
-
-        this._wallSegmentsCache = segments;
-        return segments;
-    }
-
-    // Ray-segment intersection test
+    // Placeholder for future wall-based raycasting
     raySegmentIntersect(rx, ry, rx2, ry2, sx1, sy1, sx2, sy2) {
         const dx = rx2 - rx;
         const dy = ry2 - ry;
@@ -2235,7 +2161,7 @@ export class Game {
         const sdy = sy2 - sy1;
 
         const denom = dx * sdy - dy * sdx;
-        if (Math.abs(denom) < 0.0001) return null; // Parallel
+        if (Math.abs(denom) < 0.0001) return null;
 
         const t = ((sx1 - rx) * sdy - (sy1 - ry) * sdx) / denom;
         const u = ((sx1 - rx) * dy - (sy1 - ry) * dx) / denom;
