@@ -116,9 +116,9 @@ export class Game {
         this.killCooldownMax = 22.5; // 22.5 seconds cooldown
         this.killRange = 100; // 1 meter = 100 pixels (approximately)
 
-        // Vision settings (in game pixels, before zoom - multiplied by 2x zoom)
-        this.crewmateVision = 300; // Crewmate vision radius
-        this.impostorVision = 400; // Impostor vision radius
+        // Vision settings (in game pixels)
+        this.crewmateVision = 600; // Crewmate vision radius
+        this.impostorVision = 800; // Impostor vision radius
         this.ghostVision = null; // null = infinite vision for ghosts
 
         // Vent cooldown state (imposter)
@@ -1990,7 +1990,7 @@ export class Game {
             const idleSprite = assetLoader.getSprite('player_idle');
             if (idleSprite && idleSprite.frames.length > 0) {
                 const frame = idleSprite.frames[0];
-                const spriteScale = 3;
+                const spriteScale = 1.5;
                 const playerColor = Player.COLORS[this.localPlayer.color % Player.COLORS.length];
                 this.localPlayer.drawRecoloredFrame(ctx, idleSprite.texture, frame, spriteScale, playerColor);
             }
