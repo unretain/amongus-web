@@ -325,31 +325,35 @@ export class Player {
                 data[i + 1] = shadowColor.g;
                 data[i + 2] = shadowColor.b;
             }
-            // Visor outline - dark green becomes black
-            else if (g > 50 && g < 120 && r < 80 && b < 80) {
-                data[i] = 0;       // R - black
-                data[i + 1] = 0;   // G
-                data[i + 2] = 0;   // B
-            }
-            // Visor colors - 3 shades based on green brightness
-            else if (g > 100 && r < 120 && b < 180) {
+            // Visor and visor edge - any pixel where green is dominant
+            // This catches all green shades including edge artifacts
+            else if (g > r && g > b && g > 30) {
+                // Calculate relative brightness of green
+                const greenBrightness = g;
+
                 // Very bright green = visor highlight (inner semicircle)
-                if (g > 220) {
+                if (greenBrightness > 200) {
                     data[i] = 195;     // R - very light cyan
                     data[i + 1] = 227; // G
                     data[i + 2] = 230; // B
                 }
-                // Medium green = visor main (middle)
-                else if (g > 160) {
+                // Medium bright green = visor main (middle)
+                else if (greenBrightness > 140) {
                     data[i] = 137;     // R - light cyan
                     data[i + 1] = 207; // G
                     data[i + 2] = 220; // B
                 }
-                // Darker green = visor shadow (outer edge)
-                else {
+                // Dark green = visor shadow/edge (outer edge and outline)
+                else if (greenBrightness > 80) {
                     data[i] = 80;      // R - dark cyan/teal
                     data[i + 1] = 140; // G
                     data[i + 2] = 170; // B
+                }
+                // Very dark green = visor outline (becomes black)
+                else {
+                    data[i] = 0;       // R - black outline
+                    data[i + 1] = 0;   // G
+                    data[i + 2] = 0;   // B
                 }
             }
         }
