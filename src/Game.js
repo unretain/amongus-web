@@ -2125,32 +2125,103 @@ export class Game {
         // Determine vision radius
         let visionRadius = this.localPlayer.isImpostor ? this.impostorVision : this.crewmateVision;
 
+        const playerX = this.localPlayer.x;
+        const playerY = this.localPlayer.y;
         const centerX = this.width / 2;
         const centerY = this.height / 2;
-        const scaledRadius = visionRadius * this.cameraZoom;
 
         // Store player room for visibility checks
-        this._playerRoom = this.getPlayerRoom(this.localPlayer.x, this.localPlayer.y, this.getRoomPolygons());
+        this._playerRoom = this.getPlayerRoom(playerX, playerY, this.getRoomPolygons());
 
+        // Get wall segments (load once)
+        const wallSegments = this.getWallSegments();
+
+        // Cast rays to build visibility polygon
+        const numRays = 360;
+        const visibilityPoints = [];
+
+        for (let i = 0; i < numRays; i++) {
+            const angle = (i / numRays) * Math.PI * 2;
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+
+            let hitDist = visionRadius;
+
+            // Check intersection with each wall segment
+            for (const wall of wallSegments) {
+                const intersection = this.raySegmentIntersect(
+                    playerX, playerY,
+                    playerX + cos * visionRadius, playerY + sin * visionRadius,
+                    wall.x1, wall.y1, wall.x2, wall.y2
+                );
+                if (intersection) {
+                    const dist = Math.sqrt((intersection.x - playerX) ** 2 + (intersection.y - playerY) ** 2);
+                    if (dist < hitDist) {
+                        hitDist = dist;
+                    }
+                }
+            }
+
+            // Convert to screen coords
+            const screenX = centerX + cos * hitDist * this.cameraZoom;
+            const screenY = centerY + sin * hitDist * this.cameraZoom;
+            visibilityPoints.push({ x: screenX, y: screenY });
+        }
+
+        // Store for visibility checks
+        this._visibilityPolygon = visibilityPoints;
+
+        // Draw gray shadow outside visibility polygon
         ctx.save();
-
-        // Draw gray overlay outside vision circle
         ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
         ctx.beginPath();
-        ctx.rect(0, 0, this.width, this.height);
-        ctx.arc(centerX, centerY, scaledRadius, 0, Math.PI * 2, true);
-        ctx.fill();
 
-        // Add soft gradient at edge of vision
-        const gradient = ctx.createRadialGradient(centerX, centerY, scaledRadius * 0.85, centerX, centerY, scaledRadius);
-        gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
-        gradient.addColorStop(1, 'rgba(0, 0, 0, 0.4)');
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, scaledRadius, 0, Math.PI * 2);
-        ctx.fill();
+        // Full screen rectangle
+        ctx.moveTo(0, 0);
+        ctx.lineTo(this.width, 0);
+        ctx.lineTo(this.width, this.height);
+        ctx.lineTo(0, this.height);
+        ctx.closePath();
 
+        // Cut out visibility polygon
+        if (visibilityPoints.length > 0) {
+            ctx.moveTo(visibilityPoints[0].x, visibilityPoints[0].y);
+            for (let i = visibilityPoints.length - 1; i >= 0; i--) {
+                ctx.lineTo(visibilityPoints[i].x, visibilityPoints[i].y);
+            }
+            ctx.closePath();
+        }
+
+        ctx.fill('evenodd');
         ctx.restore();
+    }
+
+    // Load wall segments from JSON (cached)
+    getWallSegments() {
+        if (this._wallSegmentsCache) return this._wallSegmentsCache;
+
+        // Load wall segments - they're in game coordinates already
+        if (this._wallSegmentsData) {
+            this._wallSegmentsCache = this._wallSegmentsData.segments || [];
+            return this._wallSegmentsCache;
+        }
+
+        // Start loading if not loaded
+        if (!this._wallSegmentsLoading) {
+            this._wallSegmentsLoading = true;
+            fetch('/assets/wall-segments.json')
+                .then(res => res.json())
+                .then(data => {
+                    this._wallSegmentsData = data;
+                    this._wallSegmentsCache = data.segments || [];
+                })
+                .catch(err => {
+                    console.warn('Failed to load wall segments:', err);
+                    this._wallSegmentsCache = [];
+                });
+        }
+
+        return [];
     }
 
     // Placeholder for future wall-based raycasting
