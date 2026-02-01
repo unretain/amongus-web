@@ -264,35 +264,29 @@ class GameRoom {
         // Minimum 1 impostor, scale with player count (1 per 4-5 players)
         const numImpostors = Math.max(1, Math.min(this.settings.numImpostors, Math.floor(playerIds.length / 4)));
 
-        // TESTING: Host is ALWAYS the impostor
-        this.impostors.clear(); // Clear any previous
-        const impostorId = this.hostId;  // Use hostId not host
-        this.impostors.add(impostorId);
-        const hostPlayer = this.players.get(impostorId);
-        if (hostPlayer) {
-            hostPlayer.isImpostor = true;
-            console.log('TESTING: Host', impostorId, 'is IMPOSTOR');
-        }
+        // Randomly select impostors
+        this.impostors.clear();
 
-        // Make sure all other players are NOT impostors
+        // Reset all players to crewmate first
         for (const [id, player] of this.players) {
-            if (id !== impostorId) {
-                player.isImpostor = false;
-            }
+            player.isImpostor = false;
         }
 
-        // If more impostors needed (for larger games), pick randomly
-        if (numImpostors > 1) {
-            const nonHostPlayers = playerIds.filter(id => id !== this.hostId);
-            for (let i = nonHostPlayers.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [nonHostPlayers[i], nonHostPlayers[j]] = [nonHostPlayers[j], nonHostPlayers[i]];
-            }
-            for (let i = 0; i < numImpostors - 1 && i < nonHostPlayers.length; i++) {
-                const extraImpostorId = nonHostPlayers[i];
-                this.impostors.add(extraImpostorId);
-                const player = this.players.get(extraImpostorId);
-                if (player) player.isImpostor = true;
+        // Shuffle player IDs for random selection
+        const shuffledIds = [...playerIds];
+        for (let i = shuffledIds.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffledIds[i], shuffledIds[j]] = [shuffledIds[j], shuffledIds[i]];
+        }
+
+        // Pick impostors randomly
+        for (let i = 0; i < numImpostors && i < shuffledIds.length; i++) {
+            const impostorId = shuffledIds[i];
+            this.impostors.add(impostorId);
+            const player = this.players.get(impostorId);
+            if (player) {
+                player.isImpostor = true;
+                console.log('Impostor assigned:', impostorId);
             }
         }
 
