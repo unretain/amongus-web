@@ -148,6 +148,8 @@
             <label>Mode:</label>
             <button id="btn-wall" class="active" onclick="setMode('wall')">Paint Walls (White)</button>
             <button id="btn-floor" onclick="setMode('floor')">Paint Floor (Black)</button>
+            <button id="btn-poly-wall" onclick="setMode('poly-wall')">Polyline Wall</button>
+            <button id="btn-poly-floor" onclick="setMode('poly-floor')">Polyline Floor</button>
         </div>
 
         <div class="tool-group">
@@ -211,6 +213,15 @@
             <li><span class="key">Spawn Points</span> - Click "Place Spawn Points" then click on map to add numbered spawns (1-10)</li>
             <li><span class="key">Right Click</span> on spawn point to delete it</li>
         </ul>
+        <h3>Polyline Mode</h3>
+        <ul>
+            <li><span class="key">P</span> - Polyline Wall mode (white)</li>
+            <li><span class="key">O</span> - Polyline Floor mode (black)</li>
+            <li><span class="key">Click</span> - Add point to polygon</li>
+            <li><span class="key">Enter</span> - Finish and fill polygon</li>
+            <li><span class="key">Z</span> - Undo last point</li>
+            <li><span class="key">Escape</span> - Cancel current polygon</li>
+        </ul>
     </div>
 
     <script>
@@ -223,10 +234,14 @@
         let mapImg = new Image();
         let zoom = 1;
         let brushSize = 20;
-        let mode = 'wall'; // 'wall' = white, 'floor' = black, 'spawn' = spawn points
+        let mode = 'wall'; // 'wall' = white, 'floor' = black, 'poly-wall', 'poly-floor', 'spawn' = spawn points
         let isDrawing = false;
         let lastX = 0;
         let lastY = 0;
+
+        // Polyline drawing state
+        let polyPoints = []; // Array of {x, y} points for current polyline
+        let isPolyMode = false;
 
         // Spawn points system
         let spawnPoints = []; // Array of {id: 1-10, x: mapX, y: mapY}
@@ -304,17 +319,30 @@
         }
 
         function setMode(m) {
+            // If switching away from poly mode, clear the current polyline
+            if (isPolyMode && !m.startsWith('poly')) {
+                polyPoints = [];
+                renderPolyPreview();
+            }
+
             mode = m;
+            isPolyMode = m.startsWith('poly');
+
             document.getElementById('btn-wall').classList.remove('active');
             document.getElementById('btn-floor').classList.remove('active');
+            document.getElementById('btn-poly-wall').classList.remove('active');
+            document.getElementById('btn-poly-floor').classList.remove('active');
             document.getElementById('btn-spawn').classList.remove('active');
-            document.getElementById('btn-' + m).classList.add('active');
+
+            const btnId = 'btn-' + m;
+            const btn = document.getElementById(btnId);
+            if (btn) btn.classList.add('active');
 
             // Show/hide spawn controls
             document.getElementById('spawnControls').style.display = m === 'spawn' ? 'block' : 'none';
 
             // Change cursor
-            collisionCanvas.style.cursor = m === 'spawn' ? 'pointer' : 'crosshair';
+            collisionCanvas.style.cursor = (m === 'spawn' || isPolyMode) ? 'crosshair' : 'crosshair';
         }
 
         function setBrushSize(size) {
@@ -567,6 +595,101 @@
         }
 
         // ============================================
+        // POLYLINE FUNCTIONS
+        // ============================================
+
+        function addPolyPoint(x, y) {
+            polyPoints.push({ x: x / zoom, y: y / zoom }); // Store in map coords
+            renderPolyPreview();
+        }
+
+        function renderPolyPreview() {
+            // We need an overlay canvas for the preview
+            let previewCanvas = document.getElementById('previewCanvas');
+            if (!previewCanvas) {
+                previewCanvas = document.createElement('canvas');
+                previewCanvas.id = 'previewCanvas';
+                previewCanvas.style.position = 'absolute';
+                previewCanvas.style.top = '0';
+                previewCanvas.style.left = '0';
+                previewCanvas.style.pointerEvents = 'none';
+                previewCanvas.style.zIndex = '50';
+                container.appendChild(previewCanvas);
+            }
+
+            previewCanvas.width = collisionCanvas.width;
+            previewCanvas.height = collisionCanvas.height;
+            const ctx = previewCanvas.getContext('2d');
+            ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+
+            if (polyPoints.length === 0) return;
+
+            const color = mode === 'poly-wall' ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)';
+
+            // Draw the polygon preview
+            ctx.fillStyle = color;
+            ctx.strokeStyle = mode === 'poly-wall' ? '#ff0' : '#0ff';
+            ctx.lineWidth = 2;
+
+            ctx.beginPath();
+            ctx.moveTo(polyPoints[0].x * zoom, polyPoints[0].y * zoom);
+            for (let i = 1; i < polyPoints.length; i++) {
+                ctx.lineTo(polyPoints[i].x * zoom, polyPoints[i].y * zoom);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Draw points
+            ctx.fillStyle = '#ff6b6b';
+            polyPoints.forEach((p, i) => {
+                ctx.beginPath();
+                ctx.arc(p.x * zoom, p.y * zoom, 5, 0, Math.PI * 2);
+                ctx.fill();
+                // Number the points
+                ctx.fillStyle = '#fff';
+                ctx.font = '12px Arial';
+                ctx.fillText(i + 1, p.x * zoom + 8, p.y * zoom + 4);
+                ctx.fillStyle = '#ff6b6b';
+            });
+        }
+
+        function finishPolyline() {
+            if (polyPoints.length < 3) {
+                alert('Need at least 3 points to create a polygon!');
+                return;
+            }
+
+            const color = mode === 'poly-wall' ? 'white' : 'black';
+
+            // Draw filled polygon on collision canvas
+            collisionCtx.fillStyle = color;
+            collisionCtx.beginPath();
+            collisionCtx.moveTo(polyPoints[0].x * zoom, polyPoints[0].y * zoom);
+            for (let i = 1; i < polyPoints.length; i++) {
+                collisionCtx.lineTo(polyPoints[i].x * zoom, polyPoints[i].y * zoom);
+            }
+            collisionCtx.closePath();
+            collisionCtx.fill();
+
+            // Clear polyline state
+            polyPoints = [];
+            renderPolyPreview();
+        }
+
+        function cancelPolyline() {
+            polyPoints = [];
+            renderPolyPreview();
+        }
+
+        function undoPolyPoint() {
+            if (polyPoints.length > 0) {
+                polyPoints.pop();
+                renderPolyPreview();
+            }
+        }
+
+        // ============================================
         // DRAWING FUNCTIONS
         // ============================================
 
@@ -598,6 +721,15 @@
                 const x = e.clientX - rect.left;
                 const y = e.clientY - rect.top;
                 addSpawnPoint(x, y);
+                return;
+            }
+
+            if (isPolyMode) {
+                // Add point to polyline
+                const rect = collisionCanvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                addPolyPoint(x, y);
                 return;
             }
 
@@ -657,8 +789,17 @@
             if (e.key === 'w' || e.key === 'W') setMode('wall');
             if (e.key === 'f' || e.key === 'F') setMode('floor');
             if (e.key === 's' || e.key === 'S') setMode('spawn');
+            if (e.key === 'p' || e.key === 'P') setMode('poly-wall');
+            if (e.key === 'o' || e.key === 'O') setMode('poly-floor');
             if (e.key === '[') setBrushSize(Math.max(5, brushSize - 5));
             if (e.key === ']') setBrushSize(Math.min(100, brushSize + 5));
+
+            // Polyline controls
+            if (isPolyMode) {
+                if (e.key === 'Enter') finishPolyline();
+                if (e.key === 'Escape') cancelPolyline();
+                if (e.key === 'z' || e.key === 'Z') undoPolyPoint();
+            }
         });
 
         // Set initial opacity
