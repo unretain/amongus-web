@@ -2130,8 +2130,11 @@ export class Game {
         const centerX = this.width / 2;
         const centerY = this.height / 2;
 
-        // Cast rays to build visibility polygon using collision mask
-        const numRays = 120;
+        // Get wall segments from room polygons
+        const wallSegments = this.getWallSegments();
+
+        // Cast rays to build visibility polygon using wall segments
+        const numRays = 180;
         const visibilityPoints = [];
 
         for (let i = 0; i < numRays; i++) {
@@ -2141,15 +2144,21 @@ export class Game {
 
             let hitDist = visionRadius;
 
-            // Raycast using collision mask to find walls
-            if (this.map && this.map.collisionData) {
-                for (let dist = 15; dist < visionRadius; dist += 5) {
-                    const checkX = playerX + cos * dist;
-                    const checkY = playerY + sin * dist;
+            // Check intersection with each wall segment
+            const rayEnd = {
+                x: playerX + cos * visionRadius,
+                y: playerY + sin * visionRadius
+            };
 
-                    if (this.map.isPixelBlocked(checkX, checkY)) {
+            for (const wall of wallSegments) {
+                const intersection = this.raySegmentIntersect(
+                    playerX, playerY, rayEnd.x, rayEnd.y,
+                    wall.x1, wall.y1, wall.x2, wall.y2
+                );
+                if (intersection) {
+                    const dist = Math.sqrt((intersection.x - playerX) ** 2 + (intersection.y - playerY) ** 2);
+                    if (dist < hitDist) {
                         hitDist = dist;
-                        break;
                     }
                 }
             }
@@ -2164,9 +2173,9 @@ export class Game {
         this._visibilityPolygon = visibilityPoints;
         this._playerRoom = this.getPlayerRoom(playerX, playerY, this.getRoomPolygons());
 
-        // Draw black everywhere except visibility polygon
+        // Draw GRAY shadow (not black) everywhere except visibility polygon
         ctx.save();
-        ctx.fillStyle = '#000000';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; // Gray tint, not full black
         ctx.beginPath();
 
         // Full screen rectangle
@@ -2190,6 +2199,54 @@ export class Game {
 
         // Add soft gradient at edges
         this.drawSimpleGradientVision(ctx);
+    }
+
+    // Get wall segments from room polygon edges (in game coordinates)
+    getWallSegments() {
+        if (this._wallSegmentsCache) return this._wallSegmentsCache;
+
+        const segments = [];
+        const rooms = this.getRoomPolygons();
+        const scale = 0.25; // Convert fullmap coords to game coords
+
+        for (const room of rooms) {
+            const points = room.points;
+            for (let i = 0; i < points.length; i++) {
+                const p1 = points[i];
+                const p2 = points[(i + 1) % points.length];
+                segments.push({
+                    x1: p1.x * scale,
+                    y1: p1.y * scale,
+                    x2: p2.x * scale,
+                    y2: p2.y * scale
+                });
+            }
+        }
+
+        this._wallSegmentsCache = segments;
+        return segments;
+    }
+
+    // Ray-segment intersection test
+    raySegmentIntersect(rx, ry, rx2, ry2, sx1, sy1, sx2, sy2) {
+        const dx = rx2 - rx;
+        const dy = ry2 - ry;
+        const sdx = sx2 - sx1;
+        const sdy = sy2 - sy1;
+
+        const denom = dx * sdy - dy * sdx;
+        if (Math.abs(denom) < 0.0001) return null; // Parallel
+
+        const t = ((sx1 - rx) * sdy - (sy1 - ry) * sdx) / denom;
+        const u = ((sx1 - rx) * dy - (sy1 - ry) * dx) / denom;
+
+        if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+            return {
+                x: rx + t * dx,
+                y: ry + t * dy
+            };
+        }
+        return null;
     }
 
     // Get room polygons from loaded minimap data
