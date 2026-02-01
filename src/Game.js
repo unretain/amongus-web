@@ -2151,10 +2151,14 @@ export class Game {
         const playerY = this.localPlayer.y;
         const centerX = this.width / 2;
         const centerY = this.height / 2;
+        const scaledRadius = visionRadius * this.cameraZoom;
 
-        // Cast rays to build visibility polygon
-        const numRays = 120;
+        // Check if collision data is available for wall shadows
+        const hasCollision = this.map && this.map.collisionData;
+
+        // Cast rays to build visibility polygon (only if collision data exists)
         const visibilityPoints = [];
+        const numRays = 90;
 
         for (let i = 0; i < numRays; i++) {
             const angle = (i / numRays) * Math.PI * 2;
@@ -2163,51 +2167,61 @@ export class Game {
 
             let hitDist = visionRadius;
 
-            // Raycast to find walls - start at 20px to skip nearby geometry
-            for (let dist = 20; dist < visionRadius; dist += 6) {
-                const checkX = playerX + cos * dist;
-                const checkY = playerY + sin * dist;
+            // Only do wall raycasting if collision data is loaded
+            if (hasCollision) {
+                // Start ray at 30px out to avoid hitting nearby walls
+                for (let dist = 30; dist < visionRadius; dist += 8) {
+                    const checkX = playerX + cos * dist;
+                    const checkY = playerY + sin * dist;
 
-                if (this.map && this.map.isPixelBlocked && this.map.isPixelBlocked(checkX, checkY)) {
-                    hitDist = dist;
-                    break;
+                    if (this.map.isPixelBlocked(checkX, checkY)) {
+                        hitDist = dist;
+                        break;
+                    }
                 }
             }
 
             // Convert to screen coords
             const screenX = centerX + cos * hitDist * this.cameraZoom;
             const screenY = centerY + sin * hitDist * this.cameraZoom;
-            visibilityPoints.push({ x: screenX, y: screenY, dist: hitDist });
+            visibilityPoints.push({ x: screenX, y: screenY });
         }
 
+        // Draw black overlay everywhere
         ctx.save();
-
-        // First fill entire screen with black
         ctx.fillStyle = '#000000';
-        ctx.fillRect(0, 0, this.width, this.height);
-
-        // Cut out visibility polygon
-        ctx.globalCompositeOperation = 'destination-out';
-
-        // Draw visibility polygon with gradient falloff
         ctx.beginPath();
-        ctx.moveTo(visibilityPoints[0].x, visibilityPoints[0].y);
-        for (let i = 1; i < visibilityPoints.length; i++) {
-            ctx.lineTo(visibilityPoints[i].x, visibilityPoints[i].y);
-        }
+
+        // Outer rectangle (full screen)
+        ctx.moveTo(0, 0);
+        ctx.lineTo(this.width, 0);
+        ctx.lineTo(this.width, this.height);
+        ctx.lineTo(0, this.height);
         ctx.closePath();
 
-        // Use radial gradient for soft edges
-        const gradientRadius = visionRadius * this.cameraZoom;
-        const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, gradientRadius);
-        gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
-        gradient.addColorStop(0.6, 'rgba(255, 255, 255, 0.8)');
-        gradient.addColorStop(0.85, 'rgba(255, 255, 255, 0.3)');
-        gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        // Inner visibility polygon (cut out) - draw counter-clockwise
+        if (visibilityPoints.length > 0) {
+            ctx.moveTo(visibilityPoints[0].x, visibilityPoints[0].y);
+            for (let i = visibilityPoints.length - 1; i >= 0; i--) {
+                ctx.lineTo(visibilityPoints[i].x, visibilityPoints[i].y);
+            }
+            ctx.closePath();
+        }
 
+        ctx.fill('evenodd');
+        ctx.restore();
+
+        // Add gradient fade at the edges of visibility
+        ctx.save();
+        const gradient = ctx.createRadialGradient(
+            centerX, centerY, scaledRadius * 0.6,
+            centerX, centerY, scaledRadius * 1.2
+        );
+        gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+        gradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.4)');
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0.8)');
         ctx.fillStyle = gradient;
-        ctx.fill();
-
+        ctx.fillRect(0, 0, this.width, this.height);
         ctx.restore();
     }
 
