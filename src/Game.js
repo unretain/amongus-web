@@ -2115,9 +2115,8 @@ export class Game {
         // Only apply vision during actual gameplay
         if (this.state !== 'playing') return;
 
-        // Skip vision during meetings or full-screen overlays
-        const isFullScreenTask = this.activeTask && !this.activeTask.isWorldTask;
-        if (this.meetingActive || isFullScreenTask || this.adminMapOpen || this.sabotageMenuOpen) return;
+        // Skip vision during meetings or full-screen overlays (not tasks - keep vision during tasks)
+        if (this.meetingActive || this.adminMapOpen || this.sabotageMenuOpen) return;
 
         // Ghosts have infinite vision
         if (this.localPlayer.isDead && this.ghostVision === null) return;
