@@ -1,9 +1,118 @@
 // Among Us Clone - Game Server with Real Lobby System
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const fs = require('fs');
+const { Connection, Keypair, PublicKey, Transaction } = require('@solana/web3.js');
+const { getOrCreateAssociatedTokenAccount, createTransferInstruction, TOKEN_PROGRAM_ID } = require('@solana/spl-token');
+const bs58 = require('bs58');
+
+// ============================================
+// SOLANA PAYOUT CONFIGURATION
+// ============================================
+
+const SOLANA_RPC = process.env.SOLANA_RPC || 'https://api.mainnet-beta.solana.com';
+const TOKEN_MINT = process.env.TOKEN_MINT_ADDRESS;
+const DEV_PRIVATE_KEY = process.env.DEV_WALLET_PRIVATE_KEY;
+
+let connection = null;
+let devWallet = null;
+let tokenMint = null;
+
+// Initialize Solana connection
+function initSolana() {
+    try {
+        connection = new Connection(SOLANA_RPC, 'confirmed');
+
+        if (DEV_PRIVATE_KEY) {
+            const privateKeyBytes = bs58.decode(DEV_PRIVATE_KEY);
+            devWallet = Keypair.fromSecretKey(privateKeyBytes);
+            console.log('Dev wallet loaded:', devWallet.publicKey.toString());
+        } else {
+            console.warn('No DEV_WALLET_PRIVATE_KEY set - payouts disabled');
+        }
+
+        if (TOKEN_MINT) {
+            tokenMint = new PublicKey(TOKEN_MINT);
+            console.log('Token mint:', TOKEN_MINT);
+        } else {
+            console.warn('No TOKEN_MINT_ADDRESS set - payouts disabled');
+        }
+
+        console.log('Solana connection initialized');
+    } catch (err) {
+        console.error('Failed to initialize Solana:', err.message);
+    }
+}
+
+// Payout tokens to winners
+async function payoutToWinners(winnerAddresses, totalAmount) {
+    if (!connection || !devWallet || !tokenMint) {
+        console.log('Solana not configured - skipping payout');
+        return { success: false, error: 'Solana not configured' };
+    }
+
+    if (!winnerAddresses || winnerAddresses.length === 0) {
+        return { success: false, error: 'No winners to pay' };
+    }
+
+    const amountPerWinner = Math.floor(totalAmount / winnerAddresses.length);
+    const results = [];
+
+    console.log(`Paying ${amountPerWinner} tokens to ${winnerAddresses.length} winners`);
+
+    for (const address of winnerAddresses) {
+        try {
+            const recipientPubkey = new PublicKey(address);
+
+            // Get or create token accounts
+            const devTokenAccount = await getOrCreateAssociatedTokenAccount(
+                connection,
+                devWallet,
+                tokenMint,
+                devWallet.publicKey
+            );
+
+            const recipientTokenAccount = await getOrCreateAssociatedTokenAccount(
+                connection,
+                devWallet,
+                tokenMint,
+                recipientPubkey
+            );
+
+            // Create transfer instruction (amount in smallest units - assuming 9 decimals)
+            const transferAmount = amountPerWinner * Math.pow(10, 9);
+
+            const transaction = new Transaction().add(
+                createTransferInstruction(
+                    devTokenAccount.address,
+                    recipientTokenAccount.address,
+                    devWallet.publicKey,
+                    transferAmount,
+                    [],
+                    TOKEN_PROGRAM_ID
+                )
+            );
+
+            // Send transaction
+            const signature = await connection.sendTransaction(transaction, [devWallet]);
+            await connection.confirmTransaction(signature);
+
+            console.log(`Paid ${amountPerWinner} tokens to ${address}: ${signature}`);
+            results.push({ address, amount: amountPerWinner, signature, success: true });
+        } catch (err) {
+            console.error(`Failed to pay ${address}:`, err.message);
+            results.push({ address, error: err.message, success: false });
+        }
+    }
+
+    return { success: true, results };
+}
+
+// Initialize Solana on server start
+initSolana();
 
 const app = express();
 
@@ -118,7 +227,7 @@ class GameRoomManager {
         return publicRooms;
     }
 
-    joinRoom(socket, code, playerName, playerColor) {
+    joinRoom(socket, code, playerName, playerColor, walletAddress) {
         const room = this.getRoom(code);
         if (!room) {
             return { error: 'Room not found' };
@@ -130,7 +239,7 @@ class GameRoomManager {
             return { error: 'Room is full' };
         }
 
-        const player = room.addPlayer(socket, { name: playerName, color: playerColor });
+        const player = room.addPlayer(socket, { name: playerName, color: playerColor, walletAddress });
         this.playerRooms.set(socket.id, code);
         socket.join(code);
 
@@ -224,6 +333,7 @@ class GameRoom {
         const player = {
             id: socket.id,
             name: data.name || `Player ${this.players.size + 1}`,
+            walletAddress: data.walletAddress || null, // Full Solana address for payouts
             color: color,
             x: 1500,
             y: 350,
@@ -383,7 +493,20 @@ class GameRoom {
                 isImpostor: p.isImpostor,
                 isDead: p.isDead
             }));
-            return { winner, impostorIds, players: allPlayers };
+
+            // Get wallet addresses of winners for payout
+            let winnerWallets = [];
+            if (winner === 'crewmates') {
+                winnerWallets = [...this.players.values()]
+                    .filter(p => !p.isImpostor && p.walletAddress)
+                    .map(p => p.walletAddress);
+            } else if (winner === 'impostors') {
+                winnerWallets = [...this.players.values()]
+                    .filter(p => p.isImpostor && p.walletAddress)
+                    .map(p => p.walletAddress);
+            }
+
+            return { winner, impostorIds, players: allPlayers, winnerWallets };
         };
 
         if (aliveImpostors === 0) {
@@ -519,7 +642,7 @@ io.on('connection', (socket) => {
 
     // Create a new game room
     socket.on('create_room', (data) => {
-        const { playerName, isPublic = true } = data;
+        const { playerName, isPublic = true, walletAddress } = data;
 
         // Leave any existing room first
         const existingRoom = roomManager.getPlayerRoom(socket.id);
@@ -529,14 +652,14 @@ io.on('connection', (socket) => {
         }
 
         const room = roomManager.createRoom(socket, playerName, isPublic);
-        const result = roomManager.joinRoom(socket, room.code, playerName, 0);
+        const result = roomManager.joinRoom(socket, room.code, playerName, 0, walletAddress);
 
         if (result.success) {
             socket.emit('room_created', {
                 code: room.code,
                 roomInfo: room.getRoomInfo()
             });
-            console.log(`${playerName} created room ${room.code}`);
+            console.log(`${playerName} created room ${room.code} (wallet: ${walletAddress ? walletAddress.slice(0,8) + '...' : 'none'})`);
         } else {
             socket.emit('error', { message: result.error });
         }
@@ -544,7 +667,7 @@ io.on('connection', (socket) => {
 
     // Join an existing room by code
     socket.on('join_room', (data) => {
-        const { code, playerName, playerColor } = data;
+        const { code, playerName, playerColor, walletAddress } = data;
 
         // Leave any existing room first
         const existingRoom = roomManager.getPlayerRoom(socket.id);
@@ -553,7 +676,7 @@ io.on('connection', (socket) => {
             socket.leave(existingRoom.code);
         }
 
-        const result = roomManager.joinRoom(socket, code, playerName, playerColor);
+        const result = roomManager.joinRoom(socket, code, playerName, playerColor, walletAddress);
 
         if (result.success) {
             const room = result.room;
@@ -742,6 +865,19 @@ io.on('connection', (socket) => {
 
             if (result.winResult) {
                 io.to(room.code).emit('game_over', result.winResult);
+
+                // Trigger payout to winners (10,000 tokens split between winners)
+                const PAYOUT_AMOUNT = 10000;
+                if (result.winResult.winnerWallets && result.winResult.winnerWallets.length > 0) {
+                    console.log(`Game over! ${result.winResult.winner} win. Paying out to ${result.winResult.winnerWallets.length} wallets`);
+                    payoutToWinners(result.winResult.winnerWallets, PAYOUT_AMOUNT)
+                        .then(payoutResult => {
+                            console.log('Payout result:', payoutResult);
+                        })
+                        .catch(err => {
+                            console.error('Payout failed:', err);
+                        });
+                }
             }
         }
     });

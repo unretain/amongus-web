@@ -41,8 +41,8 @@ export class MainMenu {
         this.walletButton = null;
         this.solCopyButton = null;
 
-        // SOL token address (CA) - replace with actual token address
-        this.solTokenAddress = 'sol1238538927498279482324';
+        // SOL token address (CA)
+        this.solTokenAddress = 'MXnaCTRcop66BjeCCHocfUq9fS7HAAMifDYy7yd4sus';
         this.copyFeedbackTimer = 0; // For "Copied!" feedback
         this.privateKeyCopyTimer = 0; // For private key copy feedback
         this.privateKeyCopyButton = null;
@@ -349,13 +349,16 @@ export class MainMenu {
             );
         }
 
-        // Draw SOL address text next to icon
+        // Draw "CA" label next to icon
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = '18px "Varela Round", Arial';
+        ctx.font = 'bold 14px "Varela Round", Arial';
         ctx.textAlign = 'left';
         const solTextX = iconX + iconW + 10;
-        const solTextY = iconY + iconH / 2 + 6;
-        ctx.fillText(this.solTokenAddress, solTextX, solTextY);
+        ctx.fillText('CA', solTextX, iconY + iconH / 2 - 8);
+
+        // Draw token address below label
+        ctx.font = '16px "Varela Round", Arial';
+        ctx.fillText(this.solTokenAddress, solTextX, iconY + iconH / 2 + 12);
 
         // Draw copy button BELOW the address with backer_2 style
         const copyBtnW = 100;

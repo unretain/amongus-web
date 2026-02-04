@@ -267,7 +267,8 @@ export class NetworkManager {
             return false;
         }
         this.playerName = playerName;
-        this.socket.emit('create_room', { playerName, isPublic });
+        const walletAddress = localStorage.getItem('solanaPublicKey') || '';
+        this.socket.emit('create_room', { playerName, isPublic, walletAddress });
         return true;
     }
 
@@ -277,7 +278,8 @@ export class NetworkManager {
             return false;
         }
         this.playerName = playerName;
-        this.socket.emit('join_room', { code, playerName, playerColor });
+        const walletAddress = localStorage.getItem('solanaPublicKey') || '';
+        this.socket.emit('join_room', { code, playerName, playerColor, walletAddress });
         return true;
     }
 
