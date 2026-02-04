@@ -605,7 +605,7 @@ export class MainMenu {
         // Public Key section
         ctx.font = 'bold 18px "Varela Round", Arial';
         ctx.fillStyle = '#FFFFFF';
-        ctx.fillText('PUBLIC KEY (Share this to receive funds)', screenW / 2, dialogY + 110);
+        ctx.fillText('PUBLIC KEY', screenW / 2, dialogY + 110);
 
         ctx.font = '16px "Varela Round", Arial';
         ctx.fillText(this.walletPublicKey || 'Generating...', screenW / 2, dialogY + 140);

@@ -1225,9 +1225,8 @@ export class Game {
             return;
         }
 
-        // Handle voting screen clicks
-        if (this.meetingActive && this.meetingPhase === 'voting') {
-            // Dead players (ghosts) cannot vote or chat
+        // Handle chat during any meeting phase (voting, results, ejection)
+        if (this.meetingActive && (this.meetingPhase === 'voting' || this.meetingPhase === 'results' || this.meetingPhase === 'ejection')) {
             const isGhost = this.localPlayer && this.localPlayer.isDead;
 
             // Check chat icon click - ghosts can't chat
@@ -1239,6 +1238,12 @@ export class Game {
                 this.chatOpen = !this.chatOpen;
                 return;
             }
+        }
+
+        // Handle voting screen clicks (voting phase only)
+        if (this.meetingActive && this.meetingPhase === 'voting') {
+            // Dead players (ghosts) cannot vote
+            const isGhost = this.localPlayer && this.localPlayer.isDead;
 
             // Ghosts cannot vote
             if (isGhost) {
@@ -2501,8 +2506,7 @@ export class Game {
             }
         }
 
-        // Show YOUR team's sprites on both victory and defeat
-        // Victory: show your winning team | Defeat: show your losing team
+        // Always show the WINNING team's sprites
         // Fallback to local players map if server didn't send player data
         const playersList = this.gameOverData.players || [...this.players.values()].map(p => ({
             id: p.id,
@@ -2512,12 +2516,12 @@ export class Game {
             isDead: p.isDead
         }));
 
-        // Show the team that the local player is on
+        // Show the winning team's players
         const playersToShow = playersList.filter(p => {
-            if (localIsImpostor) {
-                return p.isImpostor; // Local is impostor - show impostors
+            if (impostorsWon) {
+                return p.isImpostor === true; // Impostors won - show impostors only
             } else {
-                return !p.isImpostor; // Local is crewmate - show crewmates
+                return p.isImpostor !== true; // Crewmates won - show crewmates only
             }
         });
 

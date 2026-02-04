@@ -60,10 +60,10 @@ export class OnlineScreen {
         }
     }
 
-    // Truncate address for display (e.g., "AbCdEfG...WxYzAbC")
+    // Truncate address for display (e.g., "AbCd...WxYz")
     truncateAddress(address) {
-        if (!address || address.length < 16) return address;
-        return address.slice(0, 7) + '...' + address.slice(-7);
+        if (!address || address.length < 8) return address;
+        return address.slice(0, 4) + '...' + address.slice(-4);
     }
 
     initFloatingCrew() {
