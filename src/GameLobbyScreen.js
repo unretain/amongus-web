@@ -377,7 +377,7 @@ export class GameLobbyScreen {
     }
 
     // Update entire room state from server room info (used for play again, host migration)
-    updateFromRoomInfo(roomInfo) {
+    updateFromRoomInfo(roomInfo, networkPlayerId = null) {
         if (!roomInfo) return;
 
         console.log('Updating from room info:', roomInfo);
@@ -394,8 +394,8 @@ export class GameLobbyScreen {
 
         // Sync player list with server state
         if (roomInfo.players && Array.isArray(roomInfo.players)) {
-            // Keep track of local player
-            const localPlayerId = this.localPlayer?.id;
+            // Keep track of local player - use network ID if available
+            const localPlayerId = networkPlayerId || this.localPlayer?.id;
 
             // Clear and rebuild player list
             this.players.clear();

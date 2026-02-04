@@ -334,6 +334,11 @@ export class Game {
                 this.spawnLocalPlayer(data);
             }
 
+            // Re-initialize tasks for this game (randomize task assignments)
+            this.tasks = [];
+            this.initTasks();
+            console.log('Initialized', this.tasks.length, 'tasks for this game');
+
             // Start role reveal screen (Crewmate for now)
             this.startRoleReveal();
 
@@ -621,10 +626,10 @@ export class Game {
 
         // Load victory/defeat screen assets
         try {
-            // Victory video (shown to winners)
+            // Victory video (shown to winners) - plays once, not looped
             this.victoryVideo = document.createElement('video');
             this.victoryVideo.src = '/assets/victory.mp4';
-            this.victoryVideo.loop = true;
+            this.victoryVideo.loop = false;
             this.victoryVideo.muted = false;
             this.victoryVideo.preload = 'auto';
 
@@ -1037,12 +1042,16 @@ export class Game {
             const playAgain = this.victoryButtons.playAgain;
             const quit = this.victoryButtons.quit;
 
+            console.log('Click at', x, y, 'playAgain:', playAgain, 'quit:', quit);
+
             if (this.isInRect(x, y, playAgain)) {
+                console.log('Play Again clicked!');
                 this.playAgain();
                 return;
             }
             if (this.isInRect(x, y, quit)) {
-                this.quitToLobbyBrowser();
+                console.log('Quit clicked!');
+                this.quitToMainMenu();
                 return;
             }
             return;
@@ -1075,21 +1084,28 @@ export class Game {
         if (this.activeTask && !this.taskCompleteOverlay) {
             this.activeTask.handleRelease();
 
-            // Check if task completed - trigger freeze frame overlay
+            // Check if task completed - trigger freeze frame overlay (not for sabotages)
             if (this.activeTask.completed) {
                 console.log(`Task "${this.activeTask.name}" completed!`);
-                // Notify network of task completion
-                if (this.network && this.network.connected) {
-                    this.network.sendTaskComplete(this.activeTask.id, this.activeTask.name);
+
+                // For sabotages, don't show task complete overlay or send task complete
+                if (this.activeTask.isSabotage) {
+                    // Just close the sabotage panel
+                    this.activeTask = null;
+                } else {
+                    // Notify network of task completion
+                    if (this.network && this.network.connected) {
+                        this.network.sendTaskComplete(this.activeTask.id, this.activeTask.name);
+                    }
+                    // Play task complete sound
+                    if (this.taskCompleteSound) {
+                        this.taskCompleteSound.currentTime = 0;
+                        this.taskCompleteSound.play().catch(e => console.log('Audio play failed:', e));
+                    }
+                    // Start freeze frame overlay
+                    this.taskCompleteOverlay = true;
+                    this.taskCompleteTimer = this.taskCompleteDuration;
                 }
-                // Play task complete sound
-                if (this.taskCompleteSound) {
-                    this.taskCompleteSound.currentTime = 0;
-                    this.taskCompleteSound.play().catch(e => console.log('Audio play failed:', e));
-                }
-                // Start freeze frame overlay
-                this.taskCompleteOverlay = true;
-                this.taskCompleteTimer = this.taskCompleteDuration;
             }
         }
     }
@@ -1716,8 +1732,8 @@ export class Game {
                 this.footstepCounter = 0;
             }
 
-            // Check collision and revert if needed
-            if (this.map.checkCollision(this.localPlayer.x, this.localPlayer.y)) {
+            // Check collision and revert if needed (ghosts can walk through walls)
+            if (!this.localPlayer.isDead && this.map.checkCollision(this.localPlayer.x, this.localPlayer.y)) {
                 this.localPlayer.x = oldX;
                 this.localPlayer.y = oldY;
             }
@@ -1776,20 +1792,26 @@ export class Game {
         // Update active task (for timed tasks like MedScan, ClearAsteroids)
         if (this.activeTask) {
             this.activeTask.update(dt, this.width, this.height);
-            // Check if task auto-completed - trigger freeze frame overlay
+            // Check if task auto-completed - trigger freeze frame overlay (not for sabotages)
             if (this.activeTask.completed && !this.taskCompleteOverlay) {
                 console.log(`Task "${this.activeTask.name}" completed!`);
-                // Notify network of task completion
-                if (this.network && this.network.connected) {
-                    this.network.sendTaskComplete(this.activeTask.id, this.activeTask.name);
+
+                // For sabotages, don't show task complete overlay
+                if (this.activeTask.isSabotage) {
+                    this.activeTask = null;
+                } else {
+                    // Notify network of task completion
+                    if (this.network && this.network.connected) {
+                        this.network.sendTaskComplete(this.activeTask.id, this.activeTask.name);
+                    }
+                    if (this.taskCompleteSound) {
+                        this.taskCompleteSound.currentTime = 0;
+                        this.taskCompleteSound.play().catch(e => console.log('Audio play failed:', e));
+                    }
+                    // Start freeze frame overlay
+                    this.taskCompleteOverlay = true;
+                    this.taskCompleteTimer = this.taskCompleteDuration;
                 }
-                if (this.taskCompleteSound) {
-                    this.taskCompleteSound.currentTime = 0;
-                    this.taskCompleteSound.play().catch(e => console.log('Audio play failed:', e));
-                }
-                // Start freeze frame overlay
-                this.taskCompleteOverlay = true;
-                this.taskCompleteTimer = this.taskCompleteDuration;
             }
         }
     }
@@ -2443,27 +2465,35 @@ export class Game {
 
         if (!this.gameOverData) return;
 
-        // Determine if local player won
-        const localIsImpostor = this.localPlayer && this.localPlayer.isImpostor;
-        const crewmatesWon = this.gameOverData.winner === 'crewmates';
-        const localPlayerWon = (crewmatesWon && !localIsImpostor) || (!crewmatesWon && localIsImpostor);
+        // Determine winner and if local player won
+        const impostorsWon = this.gameOverData.winner === 'impostors';
+        const localIsImpostor = this.localPlayer ? this.localPlayer.isImpostor : false;
 
-        // Draw background (video for winners, image for losers)
-        if (localPlayerWon && this.victoryVideo && this.victoryVideo.readyState >= 2) {
-            // Draw video frame
-            ctx.drawImage(this.victoryVideo, 0, 0, screenW, screenH);
-        } else if (!localPlayerWon && this.defeatImage && this.defeatImage.complete) {
-            // Draw defeat image
-            ctx.drawImage(this.defeatImage, 0, 0, screenW, screenH);
+        // Local player wins if they're on the winning team
+        const localPlayerWon = (impostorsWon && localIsImpostor) || (!impostorsWon && !localIsImpostor);
+
+        console.log('Victory screen - winner:', this.gameOverData.winner, 'impostorsWon:', impostorsWon, 'localIsImpostor:', localIsImpostor, 'localPlayerWon:', localPlayerWon);
+
+        // Draw background based on whether LOCAL player won or lost
+        if (localPlayerWon) {
+            // VICTORY - show victory video
+            if (this.victoryVideo && this.victoryVideo.readyState >= 2) {
+                ctx.drawImage(this.victoryVideo, 0, 0, screenW, screenH);
+            } else {
+                ctx.fillStyle = '#1a472a'; // Green fallback
+                ctx.fillRect(0, 0, screenW, screenH);
+            }
         } else {
-            // Fallback background
-            ctx.fillStyle = localPlayerWon ? '#1a472a' : '#4a1a1a';
-            ctx.fillRect(0, 0, screenW, screenH);
+            // DEFEAT - show defeat image
+            if (this.defeatImage && this.defeatImage.complete) {
+                ctx.drawImage(this.defeatImage, 0, 0, screenW, screenH);
+            } else {
+                ctx.fillStyle = '#4a1a1a'; // Red fallback
+                ctx.fillRect(0, 0, screenW, screenH);
+            }
         }
 
-        // Determine which players to show
-        // Crewmates win: show crewmates
-        // Impostors win: show impostors
+        // Always show the WINNING team's sprites (impostors if they won, crewmates if they won)
         // Fallback to local players map if server didn't send player data
         const playersList = this.gameOverData.players || [...this.players.values()].map(p => ({
             id: p.id,
@@ -2473,11 +2503,12 @@ export class Game {
             isDead: p.isDead
         }));
 
+        // Show winning team's players
         const playersToShow = playersList.filter(p => {
-            if (crewmatesWon) {
-                return !p.isImpostor; // Show crewmates
+            if (impostorsWon) {
+                return p.isImpostor; // Impostors won - show impostors
             } else {
-                return p.isImpostor; // Show impostors
+                return !p.isImpostor; // Crewmates won - show crewmates
             }
         });
 
@@ -2600,6 +2631,31 @@ export class Game {
                 data[i] = shadowColor.r;
                 data[i + 1] = shadowColor.g;
                 data[i + 2] = shadowColor.b;
+            }
+            // Visor - any pixel where green is dominant (convert to cyan)
+            else if (g > r && g > b && g > 30) {
+                const greenBrightness = g;
+                if (greenBrightness > 200) {
+                    // Very bright green = visor highlight
+                    data[i] = 195;
+                    data[i + 1] = 227;
+                    data[i + 2] = 230;
+                } else if (greenBrightness > 140) {
+                    // Medium green = visor main
+                    data[i] = 137;
+                    data[i + 1] = 207;
+                    data[i + 2] = 220;
+                } else if (greenBrightness > 80) {
+                    // Dark green = visor shadow
+                    data[i] = 80;
+                    data[i + 1] = 140;
+                    data[i + 2] = 170;
+                } else {
+                    // Very dark green = visor outline (black)
+                    data[i] = 0;
+                    data[i + 1] = 0;
+                    data[i + 2] = 0;
+                }
             }
         }
 
@@ -3355,10 +3411,10 @@ export class Game {
         if (this.activeSabotage) {
             let targets = [];
             if (this.activeSabotage === 'reactor') {
-                // Reactor has two panels
+                // Reactor has two panels (matching ReactorMeltdownTask coordinates)
                 targets = [
-                    { x: 320, y: 540 },   // Left reactor panel
-                    { x: 320, y: 680 }    // Right reactor panel
+                    { x: 291, y: 704 },   // Bottom reactor panel
+                    { x: 283, y: 400 }    // Top reactor panel
                 ];
             } else if (this.activeSabotage === '02') {
                 // O2 has two keypads
@@ -3387,13 +3443,18 @@ export class Game {
             return;
         }
 
-        // Normal task arrow
+        // Normal task arrow (impostors also get arrows for fake tasks)
         let nextTask = null;
         for (const task of this.tasks) {
             if (task.completed) continue;
             if (task.enabled === false) continue;
             nextTask = task;
             break;
+        }
+
+        // Debug: Log if no tasks found
+        if (!nextTask && this.tasks.length === 0) {
+            console.log('No tasks available - tasks array is empty');
         }
 
         if (!nextTask) return;
@@ -4549,6 +4610,12 @@ export class Game {
 
     // Called when meeting is triggered (either locally or from network)
     triggerMeeting(type, callerId, bodyId = null) {
+        // Close any active task (e.g., asteroids, wires, etc.)
+        if (this.activeTask) {
+            this.activeTask.close();
+            this.activeTask = null;
+        }
+
         this.meetingActive = true;
         this.meetingPhase = 'intro';
         this.meetingTimer = this.introDuration;
@@ -4752,11 +4819,13 @@ export class Game {
         this.stopAmbience();
 
         // Determine if local player won
-        const localIsImpostor = this.localPlayer && this.localPlayer.isImpostor;
-        const crewmatesWon = winner === 'crewmates';
-        const localPlayerWon = (crewmatesWon && !localIsImpostor) || (!crewmatesWon && localIsImpostor);
+        const impostorsWon = winner === 'impostors';
+        const localIsImpostor = this.localPlayer ? this.localPlayer.isImpostor : false;
+        const localPlayerWon = (impostorsWon && localIsImpostor) || (!impostorsWon && !localIsImpostor);
 
-        // Play victory video for winners
+        console.log('triggerGameOver - impostorsWon:', impostorsWon, 'localIsImpostor:', localIsImpostor, 'localPlayerWon:', localPlayerWon);
+
+        // Play victory video for winners only
         if (localPlayerWon && this.victoryVideo) {
             this.victoryVideo.currentTime = 0;
             this.victoryVideo.play().catch(e => console.warn('Failed to play victory video', e));
@@ -5401,8 +5470,9 @@ export class Game {
             this.gameLobbyScreen.isHost = isHost;
             console.log('Returned to lobby - isHost:', isHost, 'hostId:', data.roomInfo.hostId, 'myId:', this.network.socket?.id);
 
-            // Update player list from server data
-            this.gameLobbyScreen.updateFromRoomInfo(data.roomInfo);
+            // Update player list from server data, passing local player ID
+            const localPlayerId = this.network?.playerId || this.network?.socket?.id;
+            this.gameLobbyScreen.updateFromRoomInfo(data.roomInfo, localPlayerId);
         }
 
         // Return to game lobby state
@@ -5455,6 +5525,48 @@ export class Game {
         }
 
         console.log('Returned to lobby browser');
+    }
+
+    // Quit to main menu (home screen)
+    quitToMainMenu() {
+        // Stop victory video
+        if (this.victoryVideo) {
+            this.victoryVideo.pause();
+            this.victoryVideo.currentTime = 0;
+        }
+
+        // Leave current room and disconnect
+        if (this.network) {
+            this.network.leaveRoom();
+        }
+
+        // Reset game state
+        this.gameOverWinner = null;
+        this.gameOverData = null;
+        this.victoryButtons = null;
+        this.localPlayer = null;
+        this.players.clear();
+        this.deadBodies = [];
+        this.meetingActive = false;
+        this.meetingPhase = 'none';
+        this.activeTask = null;
+        this.activeSabotage = null;
+        this.sabotageMenuOpen = false;
+        this.chatMessages = [];
+        this.chatInput = '';
+        this.chatOpen = false;
+
+        // Reset tasks
+        this.tasks = [];
+        this.initTasks();
+
+        // Go to main menu
+        this.state = 'menu';
+
+        // Play theme music
+        this.playThemeMusic();
+
+        console.log('Returned to main menu');
     }
 
     // Trigger a specific sabotage
@@ -5585,11 +5697,13 @@ export class Game {
         this.stopAmbience();
 
         // Determine if local player won
-        const localIsImpostor = this.localPlayer && this.localPlayer.isImpostor;
-        const crewmatesWon = data.winner === 'crewmates';
-        const localPlayerWon = (crewmatesWon && !localIsImpostor) || (!crewmatesWon && localIsImpostor);
+        const impostorsWon = data.winner === 'impostors';
+        const localIsImpostor = this.localPlayer ? this.localPlayer.isImpostor : false;
+        const localPlayerWon = (impostorsWon && localIsImpostor) || (!impostorsWon && !localIsImpostor);
 
-        // Play victory video for winners
+        console.log('onGameOver - impostorsWon:', impostorsWon, 'localIsImpostor:', localIsImpostor, 'localPlayerWon:', localPlayerWon);
+
+        // Play victory video for winners only
         if (localPlayerWon && this.victoryVideo) {
             this.victoryVideo.currentTime = 0;
             this.victoryVideo.play().catch(e => console.warn('Failed to play victory video', e));

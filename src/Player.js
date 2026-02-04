@@ -205,7 +205,16 @@ export class Player {
         // Get the player's color
         const playerColor = Player.COLORS[this.color % Player.COLORS.length];
 
-        if (this.moving) {
+        // Dead players always use ghost sprite (no walking animation)
+        if (isGhost) {
+            const ghostSprite = assetLoader?.getSprite('player_ghost');
+            if (ghostSprite && ghostSprite.frames.length > 0) {
+                // Animate ghost floating
+                const ghostFrameIndex = this.animationFrame % ghostSprite.frames.length;
+                const frame = ghostSprite.frames[ghostFrameIndex];
+                this.drawRecoloredFrame(ctx, ghostSprite.texture, frame, spriteScale, playerColor);
+            }
+        } else if (this.moving) {
             const walkSprite = assetLoader?.getSprite('player_walk');
             if (walkSprite && walkSprite.frames.length > 0) {
                 const frameIndex = this.animationFrame % walkSprite.frames.length;

@@ -616,13 +616,25 @@ export class MainMenu {
 
         ctx.font = '14px "Varela Round", Arial';
         const privKeyDisplay = this.walletPrivateKey || 'Generating...';
-        ctx.fillText(privKeyDisplay, screenW / 2, dialogY + 230);
 
-        // Copy Private Key button
+        // Split private key into multiple lines to fit within dialog
+        const maxCharsPerLine = 44;
+        const lines = [];
+        for (let i = 0; i < privKeyDisplay.length; i += maxCharsPerLine) {
+            lines.push(privKeyDisplay.substring(i, i + maxCharsPerLine));
+        }
+
+        // Draw each line
+        const lineHeight = 20;
+        for (let i = 0; i < lines.length; i++) {
+            ctx.fillText(lines[i], screenW / 2, dialogY + 230 + (i * lineHeight));
+        }
+
+        // Copy Private Key button - adjust Y based on number of lines
         const copyBtnW = 80;
         const copyBtnH = 35;
         const copyBtnX = (screenW - copyBtnW) / 2;
-        const copyBtnY = dialogY + 260;
+        const copyBtnY = dialogY + 230 + (lines.length * lineHeight) + 15;
 
         this.privateKeyCopyButton = { x: copyBtnX, y: copyBtnY, w: copyBtnW, h: copyBtnH };
 

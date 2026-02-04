@@ -1662,7 +1662,9 @@ export class EnterCodeTask extends Task {
         this.enteredCode = '';     // What user has entered so far
         this.completed = false;
         this.showSuccess = false;
+        this.showError = false;    // Flash "INCORRECT" on wrong code
         this.successTimer = 0;
+        this.errorTimer = 0;
         this.sabotageActive = false;
         this.partnerTask = null;   // Reference to the other O2 panel
 
@@ -1691,6 +1693,14 @@ export class EnterCodeTask extends Task {
             if (this.successTimer > 1.5) {
                 this.completed = true;
                 this.active = false;
+            }
+        }
+
+        if (this.showError) {
+            this.errorTimer += dt;
+            if (this.errorTimer > 1.0) {
+                this.showError = false;
+                this.errorTimer = 0;
             }
         }
     }
@@ -1748,13 +1758,18 @@ export class EnterCodeTask extends Task {
             postItX, postItY, postItW, postItH
         );
 
-        // Draw target code on post-it note (or "No Sabotage" message)
+        // Draw target code on post-it note (or status message)
         ctx.fillStyle = '#000000';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         if (this.sabotageActive) {
             ctx.font = `bold ${32 * scale}px "Varela Round", Arial`;
             ctx.fillText(this.targetCode, postItX + postItW / 2, postItY + postItH / 2 + 10);
+        } else if (this.completed) {
+            // This panel is done
+            ctx.font = `bold ${18 * scale}px "Varela Round", Arial`;
+            ctx.fillStyle = '#00AA00';
+            ctx.fillText('O2 Fixed!', postItX + postItW / 2, postItY + postItH / 2 + 10);
         } else {
             ctx.font = `bold ${16 * scale}px "Varela Round", Arial`;
             ctx.fillText('No Sabotage', postItX + postItW / 2, postItY + postItH / 2);
@@ -1777,18 +1792,28 @@ export class EnterCodeTask extends Task {
             }
         }
 
-        // Draw success overlay
+        // Draw "CORRECT" on the calculator display when code accepted
         if (this.showSuccess) {
-            ctx.fillStyle = 'rgba(0, 255, 0, 0.3)';
-            ctx.fillRect(0, 0, screenW, screenH);
-
-            ctx.font = `bold ${48}px "Varela Round", Arial`;
+            ctx.font = `bold ${28 * scale}px "Varela Round", Arial`;
             ctx.fillStyle = '#00FF00';
             ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 4;
+            ctx.lineWidth = 2;
             ctx.textAlign = 'center';
-            ctx.strokeText('CODE ACCEPTED', screenW / 2, screenH / 2 - keypadH / 2 - 30);
-            ctx.fillText('CODE ACCEPTED', screenW / 2, screenH / 2 - keypadH / 2 - 30);
+            ctx.textBaseline = 'middle';
+            ctx.strokeText('CORRECT', keypadX + keypadW / 2 - 5 * scale, displayY + displayH / 2 + 15 * scale);
+            ctx.fillText('CORRECT', keypadX + keypadW / 2 - 5 * scale, displayY + displayH / 2 + 15 * scale);
+        }
+
+        // Draw "INCORRECT" on the calculator display when wrong code entered
+        if (this.showError) {
+            ctx.font = `bold ${24 * scale}px "Varela Round", Arial`;
+            ctx.fillStyle = '#FF0000';
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 2;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.strokeText('INCORRECT', keypadX + keypadW / 2 - 5 * scale, displayY + displayH / 2 + 15 * scale);
+            ctx.fillText('INCORRECT', keypadX + keypadW / 2 - 5 * scale, displayY + displayH / 2 + 15 * scale);
         }
     }
 
@@ -1811,14 +1836,18 @@ export class EnterCodeTask extends Task {
         if (value === 'X') {
             // Clear entered code
             this.enteredCode = '';
+            this.showError = false;
         } else if (value === '✓') {
             // Check if code is correct
             if (this.enteredCode === this.targetCode) {
                 this.showSuccess = true;
+                this.showError = false;
                 this.successTimer = 0;
                 console.log('O2 code correct!');
             } else {
-                // Wrong code - clear and try again
+                // Wrong code - show error and clear
+                this.showError = true;
+                this.errorTimer = 0;
                 this.enteredCode = '';
             }
         } else {
