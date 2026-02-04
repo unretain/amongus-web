@@ -600,16 +600,23 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Return to lobby (play again) - resets room state without leaving
+    // Return to lobby (play again) - only HOST can return everyone to lobby
     socket.on('return_to_lobby', () => {
         const room = roomManager.getPlayerRoom(socket.id);
         if (room) {
+            // Only host can return everyone to lobby
+            if (socket.id !== room.hostId) {
+                console.log(`Non-host ${socket.id} tried to return to lobby, ignoring`);
+                socket.emit('error', { message: 'Only the host can start a new game' });
+                return;
+            }
+
             room.returnToLobby();
             // Notify all players in the room
             io.to(room.code).emit('returned_to_lobby', {
                 roomInfo: room.getRoomInfo()
             });
-            console.log(`Room ${room.code} returned to lobby`);
+            console.log(`Room ${room.code} returned to lobby by host`);
         }
     });
 

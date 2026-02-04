@@ -1528,6 +1528,14 @@ export class Game {
     }
 
     update(dt) {
+        // Update toast timer (runs in any state)
+        if (this.toastTimer > 0) {
+            this.toastTimer -= dt;
+            if (this.toastTimer <= 0) {
+                this.toastMessage = null;
+            }
+        }
+
         // Update main menu
         if (this.state === 'menu') {
             this.mainMenu.update(dt, this.width, this.height);
@@ -2493,7 +2501,8 @@ export class Game {
             }
         }
 
-        // Always show the WINNING team's sprites (impostors if they won, crewmates if they won)
+        // Show YOUR team's sprites on both victory and defeat
+        // Victory: show your winning team | Defeat: show your losing team
         // Fallback to local players map if server didn't send player data
         const playersList = this.gameOverData.players || [...this.players.values()].map(p => ({
             id: p.id,
@@ -2503,12 +2512,12 @@ export class Game {
             isDead: p.isDead
         }));
 
-        // Show winning team's players
+        // Show the team that the local player is on
         const playersToShow = playersList.filter(p => {
-            if (impostorsWon) {
-                return p.isImpostor; // Impostors won - show impostors
+            if (localIsImpostor) {
+                return p.isImpostor; // Local is impostor - show impostors
             } else {
-                return !p.isImpostor; // Crewmates won - show crewmates
+                return !p.isImpostor; // Local is crewmate - show crewmates
             }
         });
 
@@ -2557,15 +2566,23 @@ export class Game {
             const btnScale = 0.7;
             const btnMargin = 40;
 
-            // Play Again - bottom left
+            // Play Again - bottom left (greyed out for non-hosts)
             const playAgainW = playAgainBtn.w * btnScale;
             const playAgainH = playAgainBtn.h * btnScale;
             const playAgainX = btnMargin;
             const playAgainY = screenH - playAgainH - btnMargin;
 
+            // Grey out for non-hosts
+            const isHost = this.gameLobbyScreen?.isHost;
+            if (!isHost) {
+                ctx.globalAlpha = 0.5;
+            }
+
             ctx.drawImage(buttonsTexture,
                 playAgainBtn.x, playAgainBtn.y, playAgainBtn.w, playAgainBtn.h,
                 playAgainX, playAgainY, playAgainW, playAgainH);
+
+            ctx.globalAlpha = 1.0;
 
             // Quit - bottom right
             const quitW = quitBtn.w * btnScale;
@@ -2582,6 +2599,25 @@ export class Game {
                 playAgain: { x: playAgainX, y: playAgainY, w: playAgainW, h: playAgainH },
                 quit: { x: quitX, y: quitY, w: quitW, h: quitH }
             };
+        }
+
+        // Draw toast message if active
+        if (this.toastMessage && this.toastTimer > 0) {
+            ctx.font = 'bold 24px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            const toastY = screenH - 150;
+            const padding = 20;
+            const textWidth = ctx.measureText(this.toastMessage).width;
+
+            // Background
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.fillRect(screenW / 2 - textWidth / 2 - padding, toastY - 20, textWidth + padding * 2, 40);
+
+            // Text
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillText(this.toastMessage, screenW / 2, toastY);
         }
     }
 
@@ -5402,8 +5438,16 @@ export class Game {
         console.log('Returned to main menu');
     }
 
-    // Play again - return to the same lobby
+    // Play again - return to the same lobby (host only)
     playAgain() {
+        // Only host can trigger play again
+        if (!this.gameLobbyScreen?.isHost) {
+            console.log('Only host can start a new game');
+            // Show message to non-host players
+            this.showToast('Waiting for host to start new game...');
+            return;
+        }
+
         // Stop victory video
         if (this.victoryVideo) {
             this.victoryVideo.pause();
@@ -5415,7 +5459,13 @@ export class Game {
             this.network.returnToLobby();
         }
 
-        console.log('Requesting return to lobby');
+        console.log('Host requesting return to lobby');
+    }
+
+    // Show a temporary toast message
+    showToast(message) {
+        this.toastMessage = message;
+        this.toastTimer = 3; // Show for 3 seconds
     }
 
     // Called when server confirms return to lobby
