@@ -821,8 +821,7 @@ export class GameLobbyScreen {
 
             // Grey out if not host OR during countdown OR not enough players
             const isCountingDown = this.startCountdown > 0;
-            // TODO: Change back to 4 for production: const notEnoughPlayers = this.players.size < 4;
-            const notEnoughPlayers = this.players.size < 1;
+            const notEnoughPlayers = this.players.size < 4;
             if (!this.isHost || isCountingDown || notEnoughPlayers) {
                 ctx.globalAlpha = 0.4;
             }
@@ -851,8 +850,7 @@ export class GameLobbyScreen {
 
             // Draw hint message ABOVE start button when not enough players
             if (notEnoughPlayers) {
-                // TODO: Change back to 4 for production: const hintText = 'At least 4 players must join to start';
-                const hintText = 'At least 1 player must join to start';
+                const hintText = 'At least 4 players must join to start';
                 const hintX = laptopX + startSpriteW / 2;
                 const hintY = laptopY - 25;
 
@@ -867,8 +865,8 @@ export class GameLobbyScreen {
 
             // Only make clickable for host when NOT counting down and enough players
             if (this.isHost && !isCountingDown) {
-                // TODO: Change back to 4 for production: const notEnoughPlayers = this.players.size < 4;
-                const notEnoughPlayers = this.players.size < 1;
+                // Require 4 players minimum to start
+                const notEnoughPlayers = this.players.size < 4;
                 this.startButton = {
                     x: laptopX,
                     y: laptopY,

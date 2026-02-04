@@ -5463,16 +5463,25 @@ export class Game {
             player.inVent = false;
         }
 
-        // Update game lobby screen with room info
+        // Properly reinitialize the game lobby screen
         if (data.roomInfo && this.gameLobbyScreen) {
-            // Check if we are the host
             const isHost = this.network.socket && data.roomInfo.hostId === this.network.socket.id;
-            this.gameLobbyScreen.isHost = isHost;
-            console.log('Returned to lobby - isHost:', isHost, 'hostId:', data.roomInfo.hostId, 'myId:', this.network.socket?.id);
-
-            // Update player list from server data, passing local player ID
+            const roomCode = data.roomInfo.code;
             const localPlayerId = this.network?.playerId || this.network?.socket?.id;
-            this.gameLobbyScreen.updateFromRoomInfo(data.roomInfo, localPlayerId);
+
+            // Convert server player data to format expected by lobby screen
+            const players = (data.roomInfo.players || []).map(p => ({
+                id: p.id,
+                name: p.name,
+                color: p.color,
+                isHost: p.isHost || p.id === data.roomInfo.hostId,
+                isLocal: p.id === localPlayerId
+            }));
+
+            console.log('Reinitializing lobby - isHost:', isHost, 'roomCode:', roomCode, 'players:', players.length);
+
+            // Call show() to properly reinitialize (loads lobby frames, sets active, adds keyboard listeners)
+            this.gameLobbyScreen.show(isHost, roomCode, players);
         }
 
         // Return to game lobby state

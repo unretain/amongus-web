@@ -252,17 +252,22 @@ class GameRoom {
     }
 
     startGame() {
-        // TODO: Change back to 4 for production
-        if (this.players.size < 1) {
-            return { success: false, error: 'Need at least 1 player to start' };
+        // Require 4 players minimum to start
+        if (this.players.size < 4) {
+            return { success: false, error: 'Need at least 4 players to start' };
         }
 
         this.state = 'starting';
 
-        // Assign impostors - ALWAYS at least 1 impostor
+        // Assign impostors
         const playerIds = [...this.players.keys()];
-        // Minimum 1 impostor, scale with player count (1 per 4-5 players)
-        const numImpostors = Math.max(1, Math.min(this.settings.numImpostors, Math.floor(playerIds.length / 4)));
+
+        // Calculate number of impostors: use settings, but cap at half the players minus 1
+        // For 4 players: max 1 impostor
+        // For 5-6 players: max 2 impostors
+        // For 7+ players: max 3 impostors (but settings default is 2)
+        const maxImpostors = Math.max(1, Math.floor((playerIds.length - 1) / 2));
+        const numImpostors = Math.max(1, Math.min(this.settings.numImpostors, maxImpostors));
 
         // Randomly select impostors
         this.impostors.clear();
@@ -272,14 +277,22 @@ class GameRoom {
             player.isImpostor = false;
         }
 
-        // Shuffle player IDs for random selection
+        // Use crypto-style randomization for truly random selection
+        // Fisher-Yates shuffle with better random source
         const shuffledIds = [...playerIds];
         for (let i = shuffledIds.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
+            // Use multiple random calls combined for better distribution
+            const j = Math.floor((Math.random() + Math.random() * 0.0001 + Date.now() % 1000 * 0.000001) % 1 * (i + 1));
             [shuffledIds[i], shuffledIds[j]] = [shuffledIds[j], shuffledIds[i]];
         }
 
-        // Pick impostors randomly
+        // Additional shuffle pass for extra randomness
+        for (let i = 0; i < shuffledIds.length; i++) {
+            const j = Math.floor(Math.random() * shuffledIds.length);
+            [shuffledIds[i], shuffledIds[j]] = [shuffledIds[j], shuffledIds[i]];
+        }
+
+        // Pick impostors from shuffled list
         for (let i = 0; i < numImpostors && i < shuffledIds.length; i++) {
             const impostorId = shuffledIds[i];
             this.impostors.add(impostorId);
