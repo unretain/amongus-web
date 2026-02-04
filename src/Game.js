@@ -395,7 +395,16 @@ export class Game {
                 }
                 assetLoader.sprites.set('player_walk', { texture: playerTexture, frames: walkFrames });
 
-                console.log(`Player sprites loaded: ${idleFrames.length} idle, ${walkFrames.length} walk`);
+                // Ghost frames (for dead players)
+                const ghostFrames = [];
+                if (this.spriteData.ghost) {
+                    for (const ghostFrame of this.spriteData.ghost) {
+                        ghostFrames.push(ghostFrame);
+                    }
+                }
+                assetLoader.sprites.set('player_ghost', { texture: playerTexture, frames: ghostFrames });
+
+                console.log(`Player sprites loaded: ${idleFrames.length} idle, ${walkFrames.length} walk, ${ghostFrames.length} ghost`);
             }
         } catch (e) {
             console.warn('Failed to load player texture, using placeholder', e);
