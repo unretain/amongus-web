@@ -103,18 +103,24 @@ export class GameLobbyScreen {
         // Collision boxes (walls/obstacles players can't walk through)
         this.collisionBoxes = [
             { x: 728, y: 163, w: 189, h: 170 },   // Center platform
-            { x: 493, y: 202, w: 49, h: 510 },    // Left wall
+            { x: 493, y: 202, w: 49, h: 510 },   // Left wall
             { x: 1098, y: 183, w: 54, h: 588 },   // Right wall
-            { x: 533, y: 675, w: 41, h: 170 },    // Bottom left
-            { x: 551, y: 809, w: 532, h: 43 },    // Bottom wall
+            { x: 533, y: 675, w: 41, h: 170 },   // Bottom left
+            { x: 551, y: 809, w: 532, h: 43 },   // Bottom wall
             { x: 1088, y: 670, w: 15, h: 156 },   // Bottom right
-            { x: 929, y: 140, w: 113, h: 18 },    // Top platform pieces
-            { x: 924, y: 153, w: 142, h: 14 },
-            { x: 920, y: 194, w: 156, h: 12 },
-            { x: 1009, y: 221, w: 100, h: 98 },
-            { x: 908, y: 191, w: 105, h: 100 },
-            { x: 534, y: 147, w: 175, h: 144 },
-            { x: 519, y: 234, w: 92, h: 96 }
+            { x: 929, y: 140, w: 113, h: 18 },   // Top platform 1
+            { x: 924, y: 153, w: 142, h: 14 },   // Top platform 2
+            { x: 920, y: 194, w: 156, h: 12 },   // Top platform 3
+            { x: 1009, y: 221, w: 100, h: 98 },   // Top platform 4
+            { x: 908, y: 191, w: 105, h: 100 },   // Top platform 5
+            { x: 534, y: 147, w: 175, h: 144 },   // Top left platform
+            { x: 519, y: 234, w: 92, h: 96 },   // Top left platform 2
+            { x: 780, y: 479, w: 92, h: 75 },   // New box
+            { x: 815, y: 460, w: 33, h: 23 },   // New box
+            { x: 825, y: 450, w: 14, h: 15 },   // New box
+            { x: 782, y: 472, w: 16, h: 9 },   // New box
+            { x: 807, y: 550, w: 17, h: 21 },   // New box
+            { x: 826, y: 548, w: 16, h: 16 },   // New box
         ];
     }
 
