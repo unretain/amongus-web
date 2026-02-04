@@ -308,7 +308,7 @@ class GameRoom {
         this.deadPlayers = new Set();
         this.settings = {
             maxPlayers: 10,
-            numImpostors: 2,
+            numImpostors: 1,
             killCooldown: 30,
             discussionTime: 15,
             votingTime: 120,

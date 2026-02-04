@@ -323,7 +323,23 @@ export class NetworkManager {
         if (now - this.lastPositionSend < this.positionSendRate) return;
         this.lastPositionSend = now;
 
-        this.socket.emit('player_move', player.serialize());
+        // Handle both Player instances (with serialize method) and plain objects
+        const data = typeof player.serialize === 'function'
+            ? player.serialize()
+            : {
+                id: player.id,
+                x: player.x,
+                y: player.y,
+                color: player.color,
+                velocityX: player.velocityX || 0,
+                velocityY: player.velocityY || 0,
+                moving: player.moving || false,
+                facingLeft: player.facingLeft || false,
+                isDead: player.isDead || false,
+                name: player.name || ''
+            };
+
+        this.socket.emit('player_move', data);
     }
 
     sendAction(action, data = {}) {

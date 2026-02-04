@@ -2489,12 +2489,21 @@ export class Game {
 
         // Determine winner and if local player won
         const impostorsWon = this.gameOverData.winner === 'impostors';
-        const localIsImpostor = this.localPlayer ? this.localPlayer.isImpostor : false;
+
+        // Check if local player was impostor using multiple sources for reliability
+        const localPlayerId = this.network?.playerId || this.localPlayer?.id;
+        let localIsImpostor = this.localPlayer ? this.localPlayer.isImpostor : false;
+
+        // Also check impostorIds from game_over data as fallback
+        if (this.gameOverData.impostorIds && localPlayerId) {
+            localIsImpostor = this.gameOverData.impostorIds.includes(localPlayerId);
+        }
 
         // Local player wins if they're on the winning team
         const localPlayerWon = (impostorsWon && localIsImpostor) || (!impostorsWon && !localIsImpostor);
 
         console.log('Victory screen - winner:', this.gameOverData.winner, 'impostorsWon:', impostorsWon, 'localIsImpostor:', localIsImpostor, 'localPlayerWon:', localPlayerWon);
+        console.log('gameOverData:', this.gameOverData);
 
         // Draw background based on whether LOCAL player won or lost
         if (localPlayerWon) {
@@ -2515,9 +2524,8 @@ export class Game {
             }
         }
 
-        // Always show the WINNING team's sprites
         // Fallback to local players map if server didn't send player data
-        const playersList = this.gameOverData.players || [...this.players.values()].map(p => ({
+        let playersList = this.gameOverData.players || [...this.players.values()].map(p => ({
             id: p.id,
             name: p.name,
             color: p.color,
@@ -2525,20 +2533,53 @@ export class Game {
             isDead: p.isDead
         }));
 
-        // Show the winning team's players
-        const playersToShow = playersList.filter(p => {
-            if (impostorsWon) {
-                return p.isImpostor === true; // Impostors won - show impostors only
+        // Ensure isImpostor is set using impostorIds from gameOverData
+        const impostorIds = this.gameOverData.impostorIds || [];
+        if (impostorIds.length > 0) {
+            playersList = playersList.map(p => ({
+                ...p,
+                isImpostor: impostorIds.includes(p.id)
+            }));
+        }
+
+        console.log('Victory screen - playersList:', playersList);
+
+        // Determine which players to show:
+        // - If local player WON: show their team (winners)
+        // - If local player LOST: show the impostors (reveal who beat them)
+        let playersToShow;
+        if (localPlayerWon) {
+            // Show your own winning team
+            if (localIsImpostor) {
+                playersToShow = playersList.filter(p => p.isImpostor === true);
             } else {
-                return p.isImpostor !== true; // Crewmates won - show crewmates only
+                playersToShow = playersList.filter(p => p.isImpostor !== true);
             }
-        });
+        } else {
+            // DEFEAT - always show the impostors who won (reveal)
+            playersToShow = playersList.filter(p => p.isImpostor === true);
+        }
+
+        console.log('Victory screen - playersToShow:', playersToShow.length, playersToShow);
+
+        // Draw "The Impostor was:" label on defeat screen
+        if (!localPlayerWon && playersToShow.length > 0) {
+            ctx.font = 'bold 32px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#FF4444';
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 4;
+            const labelText = playersToShow.length === 1 ? 'The Impostor was:' : 'The Impostors were:';
+            ctx.strokeText(labelText, screenW / 2, screenH / 2 - 80);
+            ctx.fillText(labelText, screenW / 2, screenH / 2 - 80);
+        }
 
         // Draw players with their sprites and names
         const playerTexture = assetLoader.getTexture('player_sheet');
         const spriteData = this.spriteData;
 
-        if (playerTexture && spriteData && spriteData.idle.length > 0) {
+        if (playerTexture && spriteData && spriteData.idle && spriteData.idle.length > 0) {
             const playerCount = playersToShow.length;
             const spacing = Math.min(200, (screenW - 100) / (playerCount + 1));
             const startX = (screenW - (playerCount - 1) * spacing) / 2;
@@ -5634,6 +5675,7 @@ export class Game {
 
         // Go to main menu
         this.state = 'menu';
+        this.mainMenu.active = true;
 
         // Play theme music
         this.playThemeMusic();
