@@ -41,8 +41,8 @@ export class MainMenu {
         this.walletButton = null;
         this.solCopyButton = null;
 
-        // SOL token address (CA)
-        this.solTokenAddress = 'MXnaCTRcop66BjeCCHocfUq9fS7HAAMifDYy7yd4sus';
+        // $SOLANUS token
+        this.solTokenAddress = 'Coming Soon...';
         this.copyFeedbackTimer = 0; // For "Copied!" feedback
         this.privateKeyCopyTimer = 0; // For private key copy feedback
         this.privateKeyCopyButton = null;
@@ -349,15 +349,15 @@ export class MainMenu {
             );
         }
 
-        // Draw "CA" label next to icon
+        // Draw "$SOLANUS" label next to icon
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 14px "Varela Round", Arial';
+        ctx.font = 'bold 16px "Varela Round", Arial';
         ctx.textAlign = 'left';
         const solTextX = iconX + iconW + 10;
-        ctx.fillText('CA', solTextX, iconY + iconH / 2 - 8);
+        ctx.fillText('$SOLANUS', solTextX, iconY + iconH / 2 - 8);
 
-        // Draw token address below label
-        ctx.font = '16px "Varela Round", Arial';
+        // Draw "Coming Soon..." below label
+        ctx.font = '14px "Varela Round", Arial';
         ctx.fillText(this.solTokenAddress, solTextX, iconY + iconH / 2 + 12);
 
         // Draw copy button BELOW the address with backer_2 style
