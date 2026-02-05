@@ -351,14 +351,10 @@ export class MainMenu {
 
         // Draw "$SOLANUS" label next to icon
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 16px "Varela Round", Arial';
+        ctx.font = 'bold 20px "Varela Round", Arial';
         ctx.textAlign = 'left';
         const solTextX = iconX + iconW + 10;
-        ctx.fillText('$SOLANUS', solTextX, iconY + iconH / 2 - 8);
-
-        // Draw "Coming Soon..." below label
-        ctx.font = '14px "Varela Round", Arial';
-        ctx.fillText(this.solTokenAddress, solTextX, iconY + iconH / 2 + 12);
+        ctx.fillText('$SOLANUS', solTextX, iconY + iconH / 2 + 6);
 
         // Draw copy button BELOW the address with backer_2 style
         const copyBtnW = 100;
