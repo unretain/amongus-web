@@ -405,39 +405,46 @@ export class GameLobbyScreen {
             this.settings = { ...this.settings, ...roomInfo.settings };
         }
 
-        // Sync player list with server state
+        // Sync player list with server state WITHOUT destroying existing Player instances.
+        // (The old version cleared the map and replaced every player with a plain object,
+        // which wiped the local player's Player methods and made the host disappear when
+        // another player left/refreshed.)
         if (roomInfo.players && Array.isArray(roomInfo.players)) {
-            // Keep track of local player - use network ID if available
             const localPlayerId = networkPlayerId || this.localPlayer?.id;
+            const incomingIds = new Set(roomInfo.players.map(p => p.id));
 
-            // Clear and rebuild player list
-            this.players.clear();
+            // Remove players no longer in the room
+            for (const id of [...this.players.keys()]) {
+                if (!incomingIds.has(id)) {
+                    this.players.delete(id);
+                }
+            }
 
+            // Add new players (as real Player instances) and update existing ones in place
             for (const playerData of roomInfo.players) {
-                const player = {
-                    id: playerData.id,
-                    name: playerData.name,
-                    color: playerData.color,
-                    x: 0,
-                    y: 0,
-                    velocityX: 0,
-                    velocityY: 0,
-                    moving: false,
-                    facingLeft: false,
-                    isHost: playerData.isHost || playerData.id === roomInfo.hostId
-                };
+                const isLocal = playerData.id === localPlayerId;
+                let player = this.players.get(playerData.id);
 
-                // Position players in lobby
-                const index = this.players.size;
-                const row = Math.floor(index / 5);
-                const col = index % 5;
-                player.x = 1150 + col * 150;
-                player.y = 450 + row * 180;
+                if (!player) {
+                    const spawnPoint = this.getRandomSpawnPoint();
+                    const color = playerData.color !== undefined ? playerData.color : this.getUniqueRandomColor();
+                    player = new Player(
+                        playerData.id,
+                        spawnPoint.x * this.mapScale,
+                        spawnPoint.y * this.mapScale,
+                        color,
+                        isLocal
+                    );
+                    player.isLocalPlayer = isLocal;
+                    this.players.set(playerData.id, player);
+                }
 
-                this.players.set(player.id, player);
+                // Update mutable fields only; keep position/animation/instance intact
+                player.name = playerData.name || player.name;
+                if (playerData.color !== undefined) player.color = playerData.color;
+                player.isHost = playerData.isHost || playerData.id === roomInfo.hostId;
 
-                // Restore local player reference
-                if (player.id === localPlayerId) {
+                if (isLocal) {
                     this.localPlayer = player;
                 }
             }
