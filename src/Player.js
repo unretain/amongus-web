@@ -15,6 +15,10 @@ export class Player {
         this.moving = false;
         this.facingLeft = false;
 
+        // Network interpolation targets (remote players ease toward these instead of snapping)
+        this.targetX = x;
+        this.targetY = y;
+
         // Animation
         this.animationFrame = 0;
         this.animationTimer = 0;
@@ -131,6 +135,12 @@ export class Player {
         if (this.isLocal) {
             this.x += this.velocityX * dt;
             this.y += this.velocityY * dt;
+        } else if (this.targetX !== undefined) {
+            // Smoothly interpolate remote players toward their last known server position.
+            // Position updates arrive ~20Hz; easing here removes the per-update teleport jitter.
+            const t = Math.min(1, dt * 15);
+            this.x += (this.targetX - this.x) * t;
+            this.y += (this.targetY - this.y) * t;
         }
 
         // Update animation (for all players based on moving state)
@@ -205,14 +215,15 @@ export class Player {
         // Get the player's color
         const playerColor = Player.COLORS[this.color % Player.COLORS.length];
 
-        // Dead players always use ghost sprite (no walking animation)
+        // Dead players use a SINGLE static ghost sprite (no animation, no loop).
+        // It still flips left/right via the facingLeft scale(-1,1) applied above.
         if (isGhost) {
             const ghostSprite = assetLoader?.getSprite('player_ghost');
             if (ghostSprite && ghostSprite.frames.length > 0) {
-                // Animate ghost floating
-                const ghostFrameIndex = this.animationFrame % ghostSprite.frames.length;
-                const frame = ghostSprite.frames[ghostFrameIndex];
-                this.drawRecoloredFrame(ctx, ghostSprite.texture, frame, spriteScale, playerColor);
+                const frame = ghostSprite.frames[0];
+                // Dead-body ghost art is smaller than the player sheet sprites; scale up to match.
+                const ghostScale = spriteScale * 1.6;
+                this.drawRecoloredFrame(ctx, ghostSprite.texture, frame, ghostScale, playerColor);
             }
         } else if (this.moving) {
             const walkSprite = assetLoader?.getSprite('player_walk');
@@ -295,9 +306,11 @@ export class Player {
         const canvas = Player._recolorCanvas;
         const rctx = Player._recolorCtx;
 
-        // Convert Unity coordinates (bottom-left origin) to canvas (top-left origin)
+        // Most sprites use Unity coordinates (bottom-left origin) and need flipping.
+        // Frames flagged topLeft (e.g. the dead-body ghost region) are already in
+        // canvas/top-left space, so use their y directly.
         const textureHeight = texture.height;
-        const srcY = textureHeight - frame.y - frame.height;
+        const srcY = frame.topLeft ? frame.y : (textureHeight - frame.y - frame.height);
 
         canvas.width = frame.width;
         canvas.height = frame.height;
@@ -522,8 +535,15 @@ export class Player {
 
     // Update from network data
     deserialize(data) {
-        this.x = data.x;
-        this.y = data.y;
+        // Interpolate toward the incoming position instead of snapping. Snap only on the
+        // first update or on big jumps (vent/respawn/teleport) so we don't glide across the map.
+        const jump = Math.hypot(data.x - this.x, data.y - this.y);
+        if (this.targetX === undefined || jump > 250) {
+            this.x = data.x;
+            this.y = data.y;
+        }
+        this.targetX = data.x;
+        this.targetY = data.y;
         this.velocityX = data.velocityX || 0;
         this.velocityY = data.velocityY || 0;
         this.moving = data.moving || false;

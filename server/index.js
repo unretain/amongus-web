@@ -111,6 +111,17 @@ async function payoutToWinners(winnerAddresses, totalAmount) {
     return { success: true, results };
 }
 
+// Pay out winners for a game_over result (no-op if payouts disabled / no wallets).
+function triggerPayout(room, winResult) {
+    const PAYOUT_AMOUNT = 10000; // 10,000 tokens split between winners
+    if (winResult && winResult.winnerWallets && winResult.winnerWallets.length > 0) {
+        console.log(`Game over! ${winResult.winner} win. Paying out to ${winResult.winnerWallets.length} wallets`);
+        payoutToWinners(winResult.winnerWallets, PAYOUT_AMOUNT)
+            .then(payoutResult => console.log('Payout result:', payoutResult))
+            .catch(err => console.error('Payout failed:', err));
+    }
+}
+
 // Initialize Solana on server start
 initSolana();
 
@@ -479,44 +490,45 @@ class GameRoom {
         return { success: true, target, winResult };
     }
 
+    // Authoritative victory payload. impostorIds/isImpostor come from server state,
+    // so every client (including crewmates who never knew the impostor) gets the truth.
+    buildVictoryData(winner) {
+        const impostorIds = [...this.impostors];
+        const allPlayers = [...this.players.values()].map(p => ({
+            id: p.id,
+            name: p.name,
+            color: p.color,
+            isImpostor: p.isImpostor,
+            isDead: p.isDead
+        }));
+
+        // Get wallet addresses of winners for payout
+        let winnerWallets = [];
+        if (winner === 'crewmates') {
+            winnerWallets = [...this.players.values()]
+                .filter(p => !p.isImpostor && p.walletAddress)
+                .map(p => p.walletAddress);
+        } else if (winner === 'impostors') {
+            winnerWallets = [...this.players.values()]
+                .filter(p => p.isImpostor && p.walletAddress)
+                .map(p => p.walletAddress);
+        }
+
+        return { winner, impostorIds, players: allPlayers, winnerWallets };
+    }
+
     checkWinCondition() {
         const aliveCrewmates = [...this.players.values()].filter(p => !p.isDead && !p.isImpostor).length;
         const aliveImpostors = [...this.players.values()].filter(p => !p.isDead && p.isImpostor).length;
 
-        // Build player data for victory screen
-        const getVictoryData = (winner) => {
-            const impostorIds = [...this.impostors];
-            const allPlayers = [...this.players.values()].map(p => ({
-                id: p.id,
-                name: p.name,
-                color: p.color,
-                isImpostor: p.isImpostor,
-                isDead: p.isDead
-            }));
-
-            // Get wallet addresses of winners for payout
-            let winnerWallets = [];
-            if (winner === 'crewmates') {
-                winnerWallets = [...this.players.values()]
-                    .filter(p => !p.isImpostor && p.walletAddress)
-                    .map(p => p.walletAddress);
-            } else if (winner === 'impostors') {
-                winnerWallets = [...this.players.values()]
-                    .filter(p => p.isImpostor && p.walletAddress)
-                    .map(p => p.walletAddress);
-            }
-
-            return { winner, impostorIds, players: allPlayers, winnerWallets };
-        };
-
         if (aliveImpostors === 0) {
             this.state = 'ended';
-            return getVictoryData('crewmates');
+            return this.buildVictoryData('crewmates');
         }
 
         if (aliveImpostors >= aliveCrewmates) {
             this.state = 'ended';
-            return getVictoryData('impostors');
+            return this.buildVictoryData('impostors');
         }
 
         return null;
@@ -865,19 +877,7 @@ io.on('connection', (socket) => {
 
             if (result.winResult) {
                 io.to(room.code).emit('game_over', result.winResult);
-
-                // Trigger payout to winners (10,000 tokens split between winners)
-                const PAYOUT_AMOUNT = 10000;
-                if (result.winResult.winnerWallets && result.winResult.winnerWallets.length > 0) {
-                    console.log(`Game over! ${result.winResult.winner} win. Paying out to ${result.winResult.winnerWallets.length} wallets`);
-                    payoutToWinners(result.winResult.winnerWallets, PAYOUT_AMOUNT)
-                        .then(payoutResult => {
-                            console.log('Payout result:', payoutResult);
-                        })
-                        .catch(err => {
-                            console.error('Payout failed:', err);
-                        });
-                }
+                triggerPayout(room, result.winResult);
             }
         }
     });
@@ -921,6 +921,41 @@ io.on('connection', (socket) => {
             voterId: socket.id,
             targetId: data.targetId // null = skip
         });
+    });
+
+    // Ejection result (host-authoritative). The host reports who was voted out;
+    // the server marks them dead and runs its own win check, then emits the
+    // authoritative game_over so the defeat screen always knows the real impostors.
+    socket.on('player_ejected', (data) => {
+        const room = roomManager.getPlayerRoom(socket.id);
+        if (!room || room.hostId !== socket.id) return;
+
+        const ejectedId = data && data.ejectedId; // null = skip / tie
+        if (ejectedId) {
+            const target = room.players.get(ejectedId);
+            if (target) {
+                target.isDead = true;
+                room.deadPlayers.add(ejectedId);
+            }
+        }
+
+        const winResult = room.checkWinCondition();
+        if (winResult) {
+            io.to(room.code).emit('game_over', winResult);
+            triggerPayout(room, winResult);
+        }
+    });
+
+    // Sabotage win (host-authoritative): a critical sabotage timer ran out -> impostors win.
+    socket.on('sabotage_win', () => {
+        const room = roomManager.getPlayerRoom(socket.id);
+        if (!room || room.hostId !== socket.id) return;
+        if (room.state === 'ended') return;
+
+        room.state = 'ended';
+        const winResult = room.buildVictoryData('impostors');
+        io.to(room.code).emit('game_over', winResult);
+        triggerPayout(room, winResult);
     });
 
     // Task started (for visual sync - show others you're doing a task)

@@ -349,12 +349,12 @@ export class MainMenu {
             );
         }
 
-        // Draw "$SOLANUS" label next to icon
+        // Draw "$TRENCHUS" label next to icon
         ctx.fillStyle = '#FFFFFF';
         ctx.font = 'bold 20px "Varela Round", Arial';
         ctx.textAlign = 'left';
         const solTextX = iconX + iconW + 10;
-        ctx.fillText('$SOLANUS', solTextX, iconY + iconH / 2 + 6);
+        ctx.fillText('$TRENCHUS', solTextX, iconY + iconH / 2 + 6);
 
         // Draw copy button BELOW the address with backer_2 style
         const copyBtnW = 100;

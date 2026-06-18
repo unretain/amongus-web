@@ -159,6 +159,10 @@ export class Game {
         // Pending game over after ejection
         this.pendingGameOver = null;
 
+        // True once the server has sent authoritative game_over data (correct impostor IDs).
+        // The local win-check is only a fallback and must not clobber server data.
+        this.gameOverFromServer = false;
+
         // Dead bodies array
         this.deadBodies = [];
 
@@ -395,16 +399,11 @@ export class Game {
                 }
                 assetLoader.sprites.set('player_walk', { texture: playerTexture, frames: walkFrames });
 
-                // Ghost frames (for dead players)
-                const ghostFrames = [];
-                if (this.spriteData.ghost) {
-                    for (const ghostFrame of this.spriteData.ghost) {
-                        ghostFrames.push(ghostFrame);
-                    }
-                }
-                assetLoader.sprites.set('player_ghost', { texture: playerTexture, frames: ghostFrames });
+                // NOTE: the ghost is NOT taken from PlayerAnimations.png anymore.
+                // It's a single static sprite from the dead body sheet, registered below
+                // once dead_body_sheet has loaded.
 
-                console.log(`Player sprites loaded: ${idleFrames.length} idle, ${walkFrames.length} walk, ${ghostFrames.length} ghost`);
+                console.log(`Player sprites loaded: ${idleFrames.length} idle, ${walkFrames.length} walk`);
             }
         } catch (e) {
             console.warn('Failed to load player texture, using placeholder', e);
@@ -550,7 +549,16 @@ export class Game {
                     x: 111, y: 439, w: 100, h: 121
                 }
             };
-            console.log('Dead body sprite sheet loaded');
+
+            // Register the ghost as a SINGLE static sprite from this sheet (no animation/loop).
+            // topLeft:true tells drawRecoloredFrame these coords are already top-left origin.
+            const g = this.deadBodySprites.ghost;
+            assetLoader.sprites.set('player_ghost', {
+                texture: assetLoader.getTexture('dead_body_sheet'),
+                frames: [{ x: g.x, y: g.y, width: g.w, height: g.h, topLeft: true }]
+            });
+
+            console.log('Dead body sprite sheet loaded; ghost sprite registered (static)');
         } catch (e) {
             console.warn('Failed to load dead body sprites', e);
         }
@@ -4814,6 +4822,13 @@ export class Game {
 
         console.log('Ejection screen started for:', playerName);
 
+        // Host reports the ejection so the SERVER runs the authoritative win check.
+        // The server knows the real impostors; crewmate clients do not, so the local
+        // check below is only a fallback for showing the screen promptly.
+        if (this.gameLobbyScreen?.isHost && this.network) {
+            this.network.sendAction('player_ejected', { ejectedId: this.ejectedPlayer.id });
+        }
+
         // Check win conditions after ejection
         this.checkWinConditionsAfterEjection();
     }
@@ -4890,6 +4905,12 @@ export class Game {
         console.log('Game over:', winner, 'wins!');
         this.state = 'gameover';
         this.gameOverWinner = winner;
+
+        // If the server already sent authoritative data, don't overwrite it with
+        // locally-derived data (a crewmate client doesn't know who the impostors are).
+        if (this.gameOverFromServer) {
+            return;
+        }
 
         // Build game over data
         const impostorIds = [];
@@ -5471,6 +5492,7 @@ export class Game {
         this.state = 'menu';
         this.gameOverWinner = null;
         this.gameOverData = null;
+        this.gameOverFromServer = false;
         this.localPlayer = null;
         this.players.clear();
         this.deadBodies = [];
@@ -5529,6 +5551,7 @@ export class Game {
         // Reset game state
         this.gameOverWinner = null;
         this.gameOverData = null;
+        this.gameOverFromServer = false;
         this.victoryButtons = null;
         this.deadBodies = [];
         this.meetingActive = false;
@@ -5613,6 +5636,7 @@ export class Game {
         // Reset game state
         this.gameOverWinner = null;
         this.gameOverData = null;
+        this.gameOverFromServer = false;
         this.victoryButtons = null;
         this.localPlayer = null;
         this.players.clear();
@@ -5656,6 +5680,7 @@ export class Game {
         // Reset game state
         this.gameOverWinner = null;
         this.gameOverData = null;
+        this.gameOverFromServer = false;
         this.victoryButtons = null;
         this.localPlayer = null;
         this.players.clear();
@@ -5778,6 +5803,12 @@ export class Game {
         this.activeSabotage = null;
         this.sabotageTimer = 0;
 
+        // Host reports the sabotage win so the server emits authoritative game_over
+        // (with real impostor IDs for the defeat screen). Local call below is a fallback.
+        if (this.gameLobbyScreen?.isHost && this.network) {
+            this.network.sendAction('sabotage_win', {});
+        }
+
         // Trigger impostor victory - use proper game over system
         this.triggerGameOver('impostors');
     }
@@ -5806,6 +5837,7 @@ export class Game {
         this.state = 'gameover';
         this.gameOverWinner = data.winner;
         this.gameOverData = data; // Store full data (winner, impostorIds, players)
+        this.gameOverFromServer = true; // authoritative — local triggerGameOver must not clobber
 
         // Stop game ambience
         this.stopAmbience();

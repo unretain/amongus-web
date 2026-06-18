@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Ghost Test — the ghost sprite</title>
+    <style>
+        body { background:#11111c; color:#eee; font-family:Arial, sans-serif; margin:24px; }
+        h1 { color:#7df9ff; margin-bottom:4px; }
+        h3 { color:#4ecdc4; margin:0 0 10px; }
+        .sub { color:#888; margin-top:0; }
+        .row { display:flex; flex-wrap:wrap; gap:18px; }
+        .card { background:#1d1d31; border:1px solid #33334d; border-radius:10px; padding:16px; }
+        canvas { image-rendering:pixelated; background:#0a0a12; border:1px solid #33334d; border-radius:6px; }
+        .verdict { background:#1a2e22; border:1px solid #4e9a6b; border-radius:10px; padding:16px; margin:16px 0; }
+        .ok  { color:#7CFC7C; font-weight:bold; }
+        .warn{ color:#ffd24a; font-weight:bold; }
+        code { background:#0a0a12; padding:2px 6px; border-radius:4px; color:#9fe6ff; font-family:monospace; }
+        button { padding:8px 16px; margin:4px; background:#4ecdc4; border:none; border-radius:5px; cursor:pointer; font-weight:bold; }
+        button:hover { background:#45b7aa; }
+        label { display:inline-block; margin-right:14px; }
+        .meta { font-family:monospace; font-size:13px; color:#9aa; white-space:pre; }
+        input[type=range]{ width:200px; vertical-align:middle; }
+    </style>
+</head>
+<body>
+    <h1>👻 Ghost Test</h1>
+    <p class="sub">The ghost is now ONE static sprite from the dead-body sheet. No animation, no loop — it just flips with walk direction.</p>
+
+    <div class="verdict" id="verdict">Loading…</div>
+
+    <div class="row">
+        <div class="card">
+            <h3>The ghost sprite (as the game draws it)</h3>
+            <p class="sub"><code>deadBodySprites.ghost</code> on <code>Player-sharedassets0.assets-55.png</code><br>region {x:111, y:439, w:100, h:121}</p>
+            <canvas id="liveCanvas" width="300" height="320"></canvas>
+            <div style="margin-top:10px;">
+                <button id="dirBtn">⟵ facing LEFT / RIGHT ⟶</button>
+                <label><input type="checkbox" id="recolorChk" checked> recolor</label>
+            </div>
+            <div style="margin-top:8px;">
+                color:
+                <select id="colorSel"></select>
+                &nbsp; scale: <input type="range" id="scaleRange" min="0.5" max="3" step="0.1" value="1.6">
+                <span id="scaleVal" class="meta" style="display:inline">1.6×</span>
+            </div>
+            <p class="meta" id="liveMeta"></p>
+        </div>
+
+        <div class="card">
+            <h3>Raw region (no recolor, zoomed)</h3>
+            <p class="sub">Exactly the pixels being cut from the sheet.</p>
+            <canvas id="rawCanvas" width="220" height="270"></canvas>
+        </div>
+    </div>
+
+<script>
+const DEAD_SHEET = '/assets/players/Player-sharedassets0.assets-55.png';
+const GHOST = { x:111, y:439, w:100, h:121 };
+
+// Among Us palette (matches Player.COLORS)
+const COLORS = [
+    {name:'Red', body:'#c51111', shadow:'#7a0838'}, {name:'Blue', body:'#132ed1', shadow:'#09158e'},
+    {name:'Green', body:'#117f2d', shadow:'#0a4d2e'}, {name:'Pink', body:'#ed54ba', shadow:'#ab2bad'},
+    {name:'Orange', body:'#ef7d0d', shadow:'#b33e15'}, {name:'Yellow', body:'#f5f557', shadow:'#c28722'},
+    {name:'Black', body:'#3f474e', shadow:'#1e1f26'}, {name:'White', body:'#d6e0f0', shadow:'#8394bf'},
+    {name:'Purple', body:'#6b2fbb', shadow:'#3b177c'}, {name:'Brown', body:'#71491e', shadow:'#5e2615'},
+    {name:'Cyan', body:'#38fedc', shadow:'#24a8be'}, {name:'Lime', body:'#50ef39', shadow:'#15a742'},
+];
+
+let deadImg = null, facingLeft = false;
+
+function load(src){ return new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=src; }); }
+function hexToRgb(h){ const m=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(h); return {r:parseInt(m[1],16),g:parseInt(m[2],16),b:parseInt(m[3],16)}; }
+
+// Same recolor rules as Player.drawRecoloredFrame (red->body, blue->shadow, green->visor)
+function cutAndRecolor(recolorOn, color){
+    const c=document.createElement('canvas'); c.width=GHOST.w; c.height=GHOST.h;
+    const x=c.getContext('2d',{willReadFrequently:true}); x.imageSmoothingEnabled=false;
+    x.drawImage(deadImg, GHOST.x, GHOST.y, GHOST.w, GHOST.h, 0, 0, GHOST.w, GHOST.h);
+    if(!recolorOn) return c;
+    const id=x.getImageData(0,0,GHOST.w,GHOST.h), d=id.data;
+    const bc=hexToRgb(color.body), sc=hexToRgb(color.shadow);
+    for(let i=0;i<d.length;i+=4){
+        const r=d[i],g=d[i+1],b=d[i+2],a=d[i+3]; if(a===0) continue;
+        if(r>150&&g<80&&b<80){ d[i]=bc.r; d[i+1]=bc.g; d[i+2]=bc.b; }
+        else if(b>150&&r<80&&g<80){ d[i]=sc.r; d[i+1]=sc.g; d[i+2]=sc.b; }
+        else if(g>r&&g>b&&g>30){
+            if(g>200){ d[i]=195; d[i+1]=227; d[i+2]=230; }
+            else if(g>140){ d[i]=137; d[i+1]=207; d[i+2]=220; }
+            else if(g>80){ d[i]=80; d[i+1]=140; d[i+2]=170; }
+        }
+    }
+    x.putImageData(id,0,0);
+    return c;
+}
+
+function draw(){
+    const recolorOn=document.getElementById('recolorChk').checked;
+    const color=COLORS[+document.getElementById('colorSel').value];
+    const scale=parseFloat(document.getElementById('scaleRange').value);
+    document.getElementById('scaleVal').textContent=scale.toFixed(1)+'×';
+
+    const sprite=cutAndRecolor(recolorOn,color);
+
+    // Live (flipped + scaled, on a faint floor line like in-game)
+    const lc=document.getElementById('liveCanvas'), lx=lc.getContext('2d');
+    lx.clearRect(0,0,lc.width,lc.height); lx.imageSmoothingEnabled=false;
+    lx.strokeStyle='#222'; lx.beginPath(); lx.moveTo(0,lc.height-40); lx.lineTo(lc.width,lc.height-40); lx.stroke();
+    const w=GHOST.w*scale, h=GHOST.h*scale;
+    lx.save();
+    lx.translate(lc.width/2, lc.height-40);
+    if(facingLeft) lx.scale(-1,1);
+    lx.globalAlpha=0.5; // ghosts are semi-transparent in game
+    lx.drawImage(sprite, -w/2, -h, w, h);
+    lx.restore();
+
+    // Raw zoom
+    const rc=document.getElementById('rawCanvas'), rx=rc.getContext('2d');
+    rx.clearRect(0,0,rc.width,rc.height); rx.imageSmoothingEnabled=false;
+    const z=2; rx.drawImage(sprite, (rc.width-GHOST.w*z)/2, (rc.height-GHOST.h*z)/2, GHOST.w*z, GHOST.h*z);
+
+    document.getElementById('liveMeta').textContent =
+        `facing: ${facingLeft?'LEFT':'RIGHT'}\nframes: 1 (static)\nalpha: 0.5 (ghost transparency)`;
+}
+
+async function init(){
+    deadImg = await load(DEAD_SHEET);
+    const sel=document.getElementById('colorSel');
+    COLORS.forEach((c,i)=>{ const o=document.createElement('option'); o.value=i; o.textContent=c.name; sel.appendChild(o); });
+    document.getElementById('verdict').innerHTML = `
+        <h3>✅ Ghost = one static sprite</h3>
+        Rendered from <code>deadBodySprites.ghost</code> (the dead-body sheet), registered as
+        <code>player_ghost</code> with a single frame. <span class="ok">No animation, no loop.</span>
+        It flips left/right via the <code>facingLeft</code> transform in <code>Player.render()</code>.
+        Use the button below to test the flip and the slider to tune on-screen size.`;
+    document.getElementById('dirBtn').onclick=()=>{ facingLeft=!facingLeft; draw(); };
+    ['recolorChk','colorSel','scaleRange'].forEach(id=>document.getElementById(id).addEventListener('input',draw));
+    draw();
+}
+init().catch(e=>{ document.getElementById('verdict').innerHTML='<span style="color:#ff6b6b">Failed to load: </span>'+e; });
+</script>
+</body>
+</html>
