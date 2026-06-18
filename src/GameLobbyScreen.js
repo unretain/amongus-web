@@ -354,7 +354,12 @@ export class GameLobbyScreen {
         );
         player.isLocalPlayer = isLocal;
         player.name = playerData.name || 'Player';
-        player.startSpawnAnimation();
+        // Only the local player plays the spawn (drop-in) animation. Remote players —
+        // whether already in the lobby when we join, or joining later — just appear at
+        // their current position instead of replaying the spawn animation.
+        if (isLocal) {
+            player.startSpawnAnimation();
+        }
 
         this.players.set(playerData.id, player);
         console.log('Players map keys after set:', [...this.players.keys()]);

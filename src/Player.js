@@ -136,9 +136,13 @@ export class Player {
             this.x += this.velocityX * dt;
             this.y += this.velocityY * dt;
         } else if (this.targetX !== undefined) {
-            // Smoothly interpolate remote players toward their last known server position.
-            // Position updates arrive ~20Hz; easing here removes the per-update teleport jitter.
-            const t = Math.min(1, dt * 15);
+            // Remote players: dead-reckon using the last known velocity so they glide at a
+            // CONSTANT speed (exactly like the local player) between the ~20Hz updates, then
+            // gently correct toward the authoritative position to absorb drift. Pure easing
+            // toward the target made them decelerate-then-jump every packet ("ease-stutter").
+            this.x += this.velocityX * dt;
+            this.y += this.velocityY * dt;
+            const t = Math.min(1, dt * 6);
             this.x += (this.targetX - this.x) * t;
             this.y += (this.targetY - this.y) * t;
         }
