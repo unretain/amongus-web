@@ -42,7 +42,7 @@ export class MainMenu {
         this.solCopyButton = null;
 
         // $SOLANUS token
-        this.solTokenAddress = 'Coming Soon...';
+        this.solTokenAddress = 'CB9LL9nwAuiUjY6PioScx7qr7FPM6wXGAerQ79hfpump';
         this.copyFeedbackTimer = 0; // For "Copied!" feedback
         this.privateKeyCopyTimer = 0; // For private key copy feedback
         this.privateKeyCopyButton = null;
@@ -354,7 +354,14 @@ export class MainMenu {
         ctx.font = 'bold 20px "Varela Round", Arial';
         ctx.textAlign = 'left';
         const solTextX = iconX + iconW + 10;
-        ctx.fillText('$TRENCHUS', solTextX, iconY + iconH / 2 + 6);
+        ctx.fillText('$TRENCHUS', solTextX, iconY + iconH / 2 - 4);
+
+        // Draw the contract address (truncated for display; Copy copies the full CA)
+        const ca = this.solTokenAddress;
+        const caShort = ca.length > 16 ? `${ca.slice(0, 6)}...${ca.slice(-6)}` : ca;
+        ctx.fillStyle = '#9aa0b5';
+        ctx.font = '13px monospace';
+        ctx.fillText(`CA: ${caShort}`, solTextX, iconY + iconH / 2 + 18);
 
         // Draw copy button BELOW the address with backer_2 style
         const copyBtnW = 100;
