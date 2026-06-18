@@ -314,8 +314,10 @@ export class GameLobbyScreen {
         window.addEventListener('keyup', this.keyUpHandler);
     }
 
-    addPlayer(playerData) {
-        // Add a new player to the lobby (called when player joins via network)
+    addPlayer(playerData, animateSpawn = false) {
+        // Add a new player to the lobby (called when player joins via network).
+        // animateSpawn: true for a player joining LIVE (everyone sees them drop in);
+        // false for players already present during the initial sync (they just appear).
         // Skip if player already exists
         if (this.players.has(playerData.id)) {
             console.log(`Player ${playerData.id} already exists, skipping`);
@@ -354,10 +356,10 @@ export class GameLobbyScreen {
         );
         player.isLocalPlayer = isLocal;
         player.name = playerData.name || 'Player';
-        // Only the local player plays the spawn (drop-in) animation. Remote players —
-        // whether already in the lobby when we join, or joining later — just appear at
-        // their current position instead of replaying the spawn animation.
-        if (isLocal) {
+        // Local player always plays the spawn (drop-in) animation. Remote players animate
+        // only when joining live (animateSpawn) — players already present when we joined
+        // just appear at their position instead of replaying the spawn animation.
+        if (isLocal || animateSpawn) {
             player.startSpawnAnimation();
         }
 
@@ -543,11 +545,34 @@ export class GameLobbyScreen {
             }
         }
 
-        // Update all players (spawn animations only - walk animations handled below)
+        // Update all players. Remote players' walk animation MUST advance per-frame here
+        // (driven by dt), not once per network packet — otherwise their legs cycle several
+        // times slower than the local player's. Also interpolate remote positions smoothly.
         for (const player of this.players.values()) {
-            // Only update spawn animation, not movement
             if (player.isSpawning) {
                 player.updateSpawnAnimation(dt);
+                continue;
+            }
+            // Local player's movement + animation is handled in its dedicated block below.
+            if (player === this.localPlayer || player.isLocalPlayer) continue;
+
+            // Smoothly interpolate toward the last networked position.
+            if (player.targetX !== undefined) {
+                const t = Math.min(1, dt * 12);
+                player.x += (player.targetX - player.x) * t;
+                player.y += (player.targetY - player.y) * t;
+            }
+
+            // Advance the walk animation every frame, exactly like the local player.
+            if (player.moving) {
+                player.animationTimer += dt;
+                if (player.animationTimer >= player.animationSpeed) {
+                    player.animationTimer = 0;
+                    player.animationFrame = (player.animationFrame + 1) % 4;
+                }
+            } else {
+                player.animationFrame = 0;
+                player.animationTimer = 0;
             }
         }
 
@@ -627,26 +652,21 @@ export class GameLobbyScreen {
         }
     }
 
-    // Update remote player from network data
+    // Update remote player from network data. Only stores the target state — the actual
+    // position interpolation and walk-animation stepping happen per-frame in update().
     updatePlayer(data) {
         const player = this.players.get(data.id);
         if (player && !player.isLocalPlayer) {
-            player.x = data.x;
-            player.y = data.y;
-            player.moving = data.moving;
-            player.facingLeft = data.facingLeft;
-
-            // Update walk animation for remote players
-            if (data.moving) {
-                player.animationTimer += 0.016; // Approximate dt
-                if (player.animationTimer >= player.animationSpeed) {
-                    player.animationTimer = 0;
-                    player.animationFrame = (player.animationFrame + 1) % 4;
-                }
-            } else {
-                player.animationFrame = 0;
-                player.animationTimer = 0;
+            // Snap on first update / big jumps, otherwise interpolate toward target in update().
+            if (player.targetX === undefined || Math.hypot(data.x - player.x, data.y - player.y) > 250) {
+                player.x = data.x;
+                player.y = data.y;
             }
+            player.targetX = data.x;
+            player.targetY = data.y;
+            const speed = Math.hypot(data.velocityX || 0, data.velocityY || 0);
+            player.moving = (data.moving || false) || speed > 1;
+            player.facingLeft = data.facingLeft || false;
         }
     }
 

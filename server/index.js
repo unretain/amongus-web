@@ -122,6 +122,18 @@ function triggerPayout(room, winResult) {
     }
 }
 
+// When a player leaves/disconnects mid-game, re-run the win check so the game can't
+// softlock (e.g. the only impostor leaves -> crewmates should immediately win).
+function handleMidGameLeave(result) {
+    if (!result || result.roomDeleted || !result.room) return;
+    if (result.room.state !== 'playing') return;
+    const winResult = result.room.checkWinCondition();
+    if (winResult) {
+        io.to(result.code).emit('game_over', winResult);
+        triggerPayout(result.room, winResult);
+    }
+}
+
 // Initialize Solana on server start
 initSolana();
 
@@ -731,6 +743,7 @@ io.on('connection', (socket) => {
                     newHostId: result.newHostId,
                     roomInfo: result.room?.getRoomInfo()
                 });
+                handleMidGameLeave(result);
             }
         }
     });
@@ -1142,6 +1155,7 @@ io.on('connection', (socket) => {
                 newHostId: result.newHostId,
                 roomInfo: result.room?.getRoomInfo()
             });
+            handleMidGameLeave(result);
         }
         console.log(`Player disconnected: ${socket.id}`);
     });

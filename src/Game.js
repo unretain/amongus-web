@@ -269,7 +269,9 @@ export class Game {
         // Player joined room - update game lobby
         this.network.onPlayerJoinedRoom = (data) => {
             console.log('Player joined room event:', data.player.id, data.player.name, 'current players:', this.gameLobbyScreen.players.size);
-            this.gameLobbyScreen.addPlayer(data.player);
+            // animateSpawn=true: this is a live join, so everyone already in the lobby
+            // sees the newcomer play the spawn (drop-in) animation.
+            this.gameLobbyScreen.addPlayer(data.player, true);
             console.log('After adding, players:', this.gameLobbyScreen.players.size);
         };
 
@@ -284,8 +286,10 @@ export class Game {
                 this.gameLobbyScreen.isHost = true;
             }
 
-            // Update room info if provided
-            if (data.roomInfo) {
+            // Only rebuild the lobby UI when we're actually in the lobby. During a game the
+            // lobby is hidden, and clearing/rebuilding its player list on a mid-game leave
+            // was a source of host-side glitches.
+            if (this.state === 'game_lobby' && data.roomInfo) {
                 this.gameLobbyScreen.updateFromRoomInfo(data.roomInfo);
             }
         };
