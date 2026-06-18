@@ -6,7 +6,7 @@ const { Server } = require('socket.io');
 const path = require('path');
 const fs = require('fs');
 const { Connection, Keypair, PublicKey, Transaction } = require('@solana/web3.js');
-const { getOrCreateAssociatedTokenAccount, createTransferInstruction, TOKEN_PROGRAM_ID } = require('@solana/spl-token');
+const { getOrCreateAssociatedTokenAccount, createTransferInstruction, getMint, TOKEN_PROGRAM_ID } = require('@solana/spl-token');
 const bs58 = require('bs58');
 
 // ============================================
@@ -20,6 +20,7 @@ const DEV_PRIVATE_KEY = process.env.DEV_WALLET_PRIVATE_KEY;
 let connection = null;
 let devWallet = null;
 let tokenMint = null;
+let tokenDecimals = null; // fetched from the mint on first payout (pump.fun tokens are 6, not 9)
 
 // Initialize Solana connection
 function initSolana() {
@@ -61,7 +62,20 @@ async function payoutToWinners(winnerAddresses, totalAmount) {
     const amountPerWinner = Math.floor(totalAmount / winnerAddresses.length);
     const results = [];
 
-    console.log(`Paying ${amountPerWinner} tokens to ${winnerAddresses.length} winners`);
+    // Fetch the real mint decimals once (pump.fun tokens are 6 decimals, NOT 9).
+    // Hardcoding 9 would send 1000x too many tokens and drain the wallet.
+    if (tokenDecimals === null) {
+        try {
+            const mintInfo = await getMint(connection, tokenMint);
+            tokenDecimals = mintInfo.decimals;
+            console.log(`Token mint decimals: ${tokenDecimals}`);
+        } catch (err) {
+            console.error('Could not fetch mint decimals, defaulting to 6:', err.message);
+            tokenDecimals = 6;
+        }
+    }
+
+    console.log(`Paying ${amountPerWinner} tokens (${tokenDecimals} decimals) to ${winnerAddresses.length} winners`);
 
     for (const address of winnerAddresses) {
         try {
@@ -82,8 +96,8 @@ async function payoutToWinners(winnerAddresses, totalAmount) {
                 recipientPubkey
             );
 
-            // Create transfer instruction (amount in smallest units - assuming 9 decimals)
-            const transferAmount = amountPerWinner * Math.pow(10, 9);
+            // Amount in the token's smallest units, using the mint's real decimals.
+            const transferAmount = BigInt(amountPerWinner) * (10n ** BigInt(tokenDecimals));
 
             const transaction = new Transaction().add(
                 createTransferInstruction(
