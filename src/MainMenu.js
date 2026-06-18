@@ -358,10 +358,10 @@ export class MainMenu {
 
         // Draw the contract address (truncated for display; Copy copies the full CA)
         const ca = this.solTokenAddress;
-        const caShort = ca.length > 16 ? `${ca.slice(0, 6)}...${ca.slice(-6)}` : ca;
-        ctx.fillStyle = '#9aa0b5';
-        ctx.font = '13px monospace';
-        ctx.fillText(`CA: ${caShort}`, solTextX, iconY + iconH / 2 + 18);
+        const caShort = ca.length > 20 ? `${ca.slice(0, 8)}...${ca.slice(-8)}` : ca;
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 15px monospace';
+        ctx.fillText(`CA: ${caShort}`, solTextX, iconY + iconH / 2 + 20);
 
         // Draw copy button BELOW the address with backer_2 style
         const copyBtnW = 100;
