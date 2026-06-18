@@ -550,7 +550,11 @@ export class Player {
         this.targetY = data.y;
         this.velocityX = data.velocityX || 0;
         this.velocityY = data.velocityY || 0;
-        this.moving = data.moving || false;
+        // Drive the walk animation off actual velocity, not just the networked moving flag.
+        // A single packet with moving:false mid-walk would otherwise reset the animation
+        // timer/frame every ~50ms and the legs would never cycle ("fewer frames" on remotes).
+        const speed = Math.hypot(this.velocityX, this.velocityY);
+        this.moving = (data.moving || false) || speed > 1;
         this.facingLeft = data.facingLeft || false;
         this.isDead = data.isDead || false;
         this.name = data.name || this.name;
